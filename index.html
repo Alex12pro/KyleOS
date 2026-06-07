@@ -165,11 +165,26 @@
       <div class="settings-panel">
         <section class="settings-group">
           <h2>Wallpaper</h2>
-          <div class="settings-options" id="wallpaper-options">
-            <button type="button" data-wallpaper="midnight"><span class="wallpaper-preview wallpaper-midnight"></span>Midnight</button>
-            <button type="button" data-wallpaper="aurora"><span class="wallpaper-preview wallpaper-aurora"></span>Aurora</button>
-            <button type="button" data-wallpaper="carbon"><span class="wallpaper-preview wallpaper-carbon"></span>Carbon</button>
+          <div class="wallpaper-picker">
+            <span class="wallpaper-preview custom-wallpaper-preview" id="custom-wallpaper-preview"></span>
+            <label class="wallpaper-upload" for="custom-wallpaper-input">
+              <span>Select custom wallpaper</span>
+              <input id="custom-wallpaper-input" type="file" accept="image/*">
+            </label>
           </div>
+        </section>
+        <section class="settings-group">
+          <h2>Patterns</h2>
+          <div class="settings-options" id="pattern-options">
+            <button type="button" data-pattern="none"><span class="pattern-preview pattern-none"></span>None</button>
+            <button type="button" data-pattern="grid"><span class="pattern-preview pattern-grid"></span>Grid</button>
+            <button type="button" data-pattern="circuit"><span class="pattern-preview pattern-circuit"></span>Circuit</button>
+            <button type="button" data-pattern="pulse"><span class="pattern-preview pattern-pulse"></span>Pulse</button>
+          </div>
+          <label class="settings-row">
+            <span>Interactive pattern</span>
+            <input id="setting-interactive-pattern" type="checkbox">
+          </label>
         </section>
         <section class="settings-group">
           <h2>Accent</h2>

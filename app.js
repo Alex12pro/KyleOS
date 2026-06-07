@@ -26,6 +26,9 @@ const webRefreshEl = document.querySelector("#web-refresh");
 const webFullscreenEl = document.querySelector("#web-fullscreen");
 const clock24El = document.querySelector("#setting-clock-24");
 const reduceMotionEl = document.querySelector("#setting-reduce-motion");
+const customWallpaperInputEl = document.querySelector("#custom-wallpaper-input");
+const customWallpaperPreviewEl = document.querySelector("#custom-wallpaper-preview");
+const interactivePatternEl = document.querySelector("#setting-interactive-pattern");
 const settingsNoteEl = document.querySelector("#settings-note");
 const resetBrowserDataEl = document.querySelector("#reset-browser-data");
 const resetOsSettingsEl = document.querySelector("#reset-os-settings");
@@ -42,7 +45,9 @@ const favoritesKey = "nss:favorites";
 const recentKey = "nss:recent";
 const settingsKey = "kyleos:settings";
 const defaultSettings = {
-  wallpaper: "midnight",
+  customWallpaper: "",
+  pattern: "grid",
+  interactivePattern: true,
   accent: "blue",
   clock24: false,
   reduceMotion: false,
@@ -99,7 +104,12 @@ function readSettings() {
 }
 
 function writeSettings() {
-  localStorage.setItem(settingsKey, JSON.stringify(osSettings));
+  try {
+    localStorage.setItem(settingsKey, JSON.stringify(osSettings));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function gameUrl(game) {
@@ -212,13 +222,28 @@ function applySettings() {
   const theme = accentThemes[osSettings.accent] || accentThemes.blue;
   document.documentElement.style.setProperty("--accent", theme.accent);
   document.documentElement.style.setProperty("--hot", theme.hot);
-  document.body.dataset.wallpaper = osSettings.wallpaper;
+  document.body.dataset.pattern = osSettings.pattern || "grid";
+  document.body.classList.toggle("has-custom-wallpaper", !!osSettings.customWallpaper);
+  document.body.classList.toggle("interactive-pattern", !!osSettings.interactivePattern);
+  document.documentElement.style.setProperty(
+    "--custom-wallpaper",
+    osSettings.customWallpaper ? `url("${osSettings.customWallpaper}")` : "none"
+  );
   document.body.classList.toggle("reduce-motion", osSettings.reduceMotion);
   updateClock();
 }
 
 function shouldAnimateEffects() {
   return !osSettings.reduceMotion && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function setupInteractivePattern() {
+  window.addEventListener("pointermove", (event) => {
+    if (!shouldAnimateEffects() || !osSettings.interactivePattern) return;
+
+    document.documentElement.style.setProperty("--pattern-x", `${event.clientX}px`);
+    document.documentElement.style.setProperty("--pattern-y", `${event.clientY}px`);
+  });
 }
 
 function burstSparks(event, count = 8) {
@@ -263,8 +288,8 @@ function playOpenAnimation(element) {
 }
 
 function renderSettings() {
-  document.querySelectorAll("button[data-wallpaper]").forEach((button) => {
-    button.classList.toggle("is-selected", button.dataset.wallpaper === osSettings.wallpaper);
+  document.querySelectorAll("button[data-pattern]").forEach((button) => {
+    button.classList.toggle("is-selected", button.dataset.pattern === osSettings.pattern);
   });
 
   document.querySelectorAll("button[data-accent]").forEach((button) => {
@@ -278,11 +303,28 @@ function renderSettings() {
   if (reduceMotionEl) {
     reduceMotionEl.checked = osSettings.reduceMotion;
   }
+
+  if (interactivePatternEl) {
+    interactivePatternEl.checked = !!osSettings.interactivePattern;
+  }
+
+  if (customWallpaperPreviewEl) {
+    customWallpaperPreviewEl.style.backgroundImage = osSettings.customWallpaper
+      ? `url("${osSettings.customWallpaper}")`
+      : "";
+  }
 }
 
 function updateSettings(nextSettings, message = "") {
+  const previousSettings = osSettings;
   osSettings = { ...osSettings, ...nextSettings };
-  writeSettings();
+  if (!writeSettings()) {
+    osSettings = previousSettings;
+    if (settingsNoteEl) {
+      settingsNoteEl.textContent = "That wallpaper image is too large to save.";
+    }
+    return;
+  }
   applySettings();
   renderSettings();
 
@@ -321,6 +363,26 @@ function resetBrowserData() {
   if (settingsNoteEl) {
     settingsNoteEl.textContent = "Browser tabs and session state reset.";
   }
+}
+
+function selectCustomWallpaper(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    if (settingsNoteEl) {
+      settingsNoteEl.textContent = "Choose an image file for the wallpaper.";
+    }
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    updateSettings({ customWallpaper: reader.result }, "Custom wallpaper updated.");
+  });
+  reader.addEventListener("error", () => {
+    if (settingsNoteEl) {
+      settingsNoteEl.textContent = "Could not load that image.";
+    }
+  });
+  reader.readAsDataURL(file);
 }
 
 function finishBoot(message = "Ready") {
@@ -1161,6 +1223,7 @@ async function init() {
   renderSettings();
   finishBoot("Ready");
   setupDraggableWindows();
+  setupInteractivePattern();
   setupSparkEffects();
   updateTaskbarState();
 }
@@ -1200,9 +1263,9 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  const wallpaperButton = event.target.closest("button[data-wallpaper]");
-  if (wallpaperButton) {
-    updateSettings({ wallpaper: wallpaperButton.dataset.wallpaper }, "Wallpaper updated.");
+  const patternButton = event.target.closest("button[data-pattern]");
+  if (patternButton) {
+    updateSettings({ pattern: patternButton.dataset.pattern }, "Pattern updated.");
     return;
   }
 
@@ -1254,6 +1317,13 @@ clock24El?.addEventListener("change", () => {
 });
 reduceMotionEl?.addEventListener("change", () => {
   updateSettings({ reduceMotion: reduceMotionEl.checked }, "Animation preference updated.");
+});
+interactivePatternEl?.addEventListener("change", () => {
+  updateSettings({ interactivePattern: interactivePatternEl.checked }, "Pattern interaction updated.");
+});
+customWallpaperInputEl?.addEventListener("change", () => {
+  selectCustomWallpaper(customWallpaperInputEl.files?.[0]);
+  customWallpaperInputEl.value = "";
 });
 resetBrowserDataEl?.addEventListener("click", resetBrowserData);
 resetOsSettingsEl?.addEventListener("click", () => {

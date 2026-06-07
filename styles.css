@@ -11,6 +11,9 @@
   --gold: #f6c85f;
   --shadow: rgba(0, 0, 0, 0.44);
   --success: #58f2a9;
+  --custom-wallpaper: none;
+  --pattern-x: 50vw;
+  --pattern-y: 50vh;
 }
 
 * {
@@ -29,18 +32,12 @@ body {
   color: var(--text);
 }
 
-body[data-wallpaper="aurora"] {
+body.has-custom-wallpaper {
   background:
-    radial-gradient(circle at 18% 22%, rgba(88, 242, 169, 0.24), transparent 31%),
-    radial-gradient(circle at 80% 12%, rgba(255, 111, 174, 0.18), transparent 29%),
-    linear-gradient(145deg, #020711 0%, #061b1e 44%, #09040f 100%);
-}
-
-body[data-wallpaper="carbon"] {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 0 0 / 36px 36px,
-    linear-gradient(225deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%) 0 0 / 36px 36px,
-    linear-gradient(145deg, #050608 0%, #11151b 48%, #020304 100%);
+    radial-gradient(circle at 20% 18%, rgba(44, 156, 255, 0.18), transparent 32%),
+    linear-gradient(rgba(2, 5, 10, 0.34), rgba(2, 5, 10, 0.58)),
+    var(--custom-wallpaper) center / cover fixed no-repeat,
+    linear-gradient(145deg, #03050a 0%, #07111f 46%, #020309 100%);
 }
 
 body.reduce-motion *,
@@ -75,6 +72,58 @@ body.reduce-motion *::after {
   transform: perspective(900px) rotateX(58deg) translateY(20%);
   transform-origin: center bottom;
   animation: grid-drift 14s linear infinite;
+}
+
+.vfx-grid::after {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--pattern-x) var(--pattern-y), rgba(83, 216, 255, 0.34), transparent 16%);
+  content: "";
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+body.interactive-pattern .vfx-grid::after {
+  opacity: 0.75;
+}
+
+body[data-pattern="none"] .vfx-grid,
+body[data-pattern="none"] .vfx-ribbon {
+  display: none;
+}
+
+body[data-pattern="grid"] .vfx-grid {
+  background:
+    linear-gradient(rgba(83, 216, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(246, 200, 95, 0.045) 1px, transparent 1px);
+  background-size: 70px 70px;
+}
+
+body[data-pattern="circuit"] .vfx-grid {
+  background:
+    linear-gradient(90deg, rgba(83, 216, 255, 0.09) 1px, transparent 1px) 0 0 / 96px 48px,
+    linear-gradient(rgba(88, 242, 169, 0.08) 1px, transparent 1px) 0 0 / 48px 96px,
+    radial-gradient(circle, rgba(83, 216, 255, 0.2) 0 2px, transparent 3px) 0 0 / 96px 96px;
+}
+
+body[data-pattern="pulse"] .vfx-grid {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(83, 216, 255, 0.18), transparent 28%),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0 36px, rgba(83, 216, 255, 0.08) 37px 39px, transparent 40px 72px);
+  animation: pulse-field 3600ms ease-in-out infinite;
+}
+
+@keyframes pulse-field {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: perspective(900px) rotateX(58deg) translateY(20%) scale(0.98);
+  }
+
+  50% {
+    opacity: 0.68;
+    transform: perspective(900px) rotateX(58deg) translateY(20%) scale(1.04);
+  }
 }
 
 .vfx-ribbon {
@@ -176,6 +225,10 @@ body::before {
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 44px 44px;
   mask-image: linear-gradient(to bottom, black, transparent 82%);
+}
+
+body[data-pattern="none"]::before {
+  display: none;
 }
 
 .boot-screen {
@@ -1016,22 +1069,94 @@ h1 {
 }
 
 .wallpaper-preview {
+  width: 86px;
+  height: 58px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(83, 216, 255, 0.28), transparent 36%),
+    linear-gradient(145deg, #03050a, #07111f 52%, #020309);
+  background-position: center;
+  background-size: cover;
+}
+
+.wallpaper-picker {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.wallpaper-upload {
+  display: grid;
+  min-height: 58px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(1, 5, 12, 0.5);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: center;
+  transition: border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.wallpaper-upload:hover,
+.wallpaper-upload:focus-within {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.wallpaper-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pattern-preview {
+  position: relative;
   width: 28px;
   height: 22px;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 6px;
+  background: rgba(1, 5, 12, 0.7);
 }
 
-.wallpaper-midnight {
-  background: linear-gradient(145deg, #03050a, #07111f 52%, #020309);
+.pattern-none::before {
+  position: absolute;
+  inset: 50% 4px auto;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--muted);
+  content: "";
 }
 
-.wallpaper-aurora {
-  background: linear-gradient(135deg, #06201c, #33142b);
+.pattern-grid {
+  background:
+    linear-gradient(rgba(83, 216, 255, 0.36) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(83, 216, 255, 0.36) 1px, transparent 1px),
+    rgba(1, 5, 12, 0.7);
+  background-size: 8px 8px;
 }
 
-.wallpaper-carbon {
-  background: linear-gradient(135deg, #050608, #191d23);
+.pattern-circuit {
+  background:
+    linear-gradient(90deg, rgba(83, 216, 255, 0.42) 1px, transparent 1px) 0 0 / 12px 7px,
+    linear-gradient(rgba(88, 242, 169, 0.36) 1px, transparent 1px) 0 0 / 7px 12px,
+    radial-gradient(circle, rgba(83, 216, 255, 0.75) 0 1px, transparent 2px) 0 0 / 14px 14px,
+    rgba(1, 5, 12, 0.7);
+}
+
+.pattern-pulse {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(83, 216, 255, 0.55), transparent 34%),
+    repeating-radial-gradient(circle, transparent 0 5px, rgba(83, 216, 255, 0.35) 6px 7px, transparent 8px 12px),
+    rgba(1, 5, 12, 0.7);
 }
 
 .accent-dot {
