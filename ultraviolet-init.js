@@ -35,17 +35,16 @@
 });
 
 function createUltravioletController() {
-  const UltravioletCtor = self.Ultraviolet;
-  if (typeof UltravioletCtor === "undefined") {
+  if (typeof self.Ultraviolet === "undefined") {
     throw new Error("Ultraviolet bundle did not expose a browser controller.");
   }
 
-  const uv = new UltravioletCtor();
+  const encode = (url) => `${self.__uv$config.prefix}${self.__uv$config.encodeUrl(url)}`;
 
   return {
     prefix: self.__uv$config.prefix,
     encodeUrl(url) {
-      return `${self.__uv$config.prefix}${uv.encodeUrl(url)}`;
+      return encode(url);
     },
     createFrame(existingFrame) {
       const frame = existingFrame || document.createElement("iframe");
@@ -53,7 +52,7 @@ function createUltravioletController() {
       return {
         frame,
         go(url) {
-          frame.src = `${self.__uv$config.prefix}${uv.encodeUrl(url)}`;
+          frame.src = encode(url);
         },
         back() {
           safeFrameHistory(frame, "back");
