@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kyle OS Browser Frame</title>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #070b14;
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="browser-page" title="Browser page" referrerpolicy="no-referrer" allow="fullscreen; autoplay; clipboard-read; clipboard-write"></iframe>
+  <script src="./scramjet-init.js"></script>
+  <script>
+    const tabId = decodeURIComponent(location.hash.slice(1) || "tab");
+    const pageFrame = document.querySelector("#browser-page");
+    const SCRAMJET_STARTUP_TIMEOUT = 30000;
+    let scramjetFrame = null;
+    let scramjetReadyPromise = null;
+
+    function send(type, detail = {}) {
+      window.parent.postMessage({ type, tabId, ...detail }, window.location.origin);
+    }
+
+    function waitForScramjet() {
+      if (window.__scramjet) {
+        return Promise.resolve(window.__scramjet);
+      }
+
+      if (window.__scramjetError) {
+        return Promise.reject(new Error(window.__scramjetError));
+      }
+
+      if (!scramjetReadyPromise) {
+        scramjetReadyPromise = new Promise((resolve, reject) => {
+          let timeout;
+          const cleanup = () => {
+            window.clearTimeout(timeout);
+            window.removeEventListener("scramjet:ready", ready);
+            window.removeEventListener("scramjet:error", fail);
+          };
+          const resetAndReject = (error) => {
+            cleanup();
+            scramjetReadyPromise = null;
+            reject(error);
+          };
+          const fail = (event) => {
+            resetAndReject(new Error(event.detail?.message || "Scramjet failed to initialize."));
+          };
+          const ready = (event) => {
+            cleanup();
+            scramjetReadyPromise = null;
+            resolve(event.detail.scramjet);
+          };
+
+          timeout = window.setTimeout(() => {
+            resetAndReject(new Error("Scramjet is still starting. Try again in a moment."));
+          }, SCRAMJET_STARTUP_TIMEOUT);
+          window.addEventListener("scramjet:ready", ready, { once: true });
+          window.addEventListener("scramjet:error", fail, { once: true });
+        });
+      }
+
+      return scramjetReadyPromise;
+    }
+
+    async function ensureScramjetFrame() {
+      const scramjet = await waitForScramjet();
+      if (!scramjetFrame) {
+        scramjetFrame = scramjet.createFrame(pageFrame);
+      }
+      return scramjetFrame;
+    }
+
+    async function navigate(url) {
+      if (!url) return;
+
+      if (url.startsWith("/api/proxy?")) {
+        pageFrame.src = url;
+        return;
+      }
+
+      const frame = await ensureScramjetFrame();
+      frame.go(url);
+    }
+
+    window.addEventListener("message", async (event) => {
+      if (event.origin !== window.location.origin || event.data?.tabId !== tabId) return;
+
+      try {
+        if (event.data.type === "kyleos:web-go") {
+          await navigate(event.data.url);
+        } else if (event.data.type === "kyleos:web-back") {
+          scramjetFrame?.back?.();
+        } else if (event.data.type === "kyleos:web-forward") {
+          scramjetFrame?.forward?.();
+        } else if (event.data.type === "kyleos:web-reload") {
+          scramjetFrame?.reload?.();
+        } else if (event.data.type === "kyleos:web-blank") {
+          pageFrame.src = "about:blank";
+        }
+      } catch (error) {
+        send("kyleos:web-shell-error", { message: error.message || "The browser frame could not load this page." });
+      }
+    });
+
+    pageFrame.addEventListener("load", () => {
+      send("kyleos:web-shell-loaded");
+    });
+
+    window.addEventListener("scramjet:ready", () => {
+      send("kyleos:web-shell-ready");
+    });
+
+    window.addEventListener("scramjet:error", (event) => {
+      send("kyleos:web-shell-error", { message: event.detail?.message || "The browser engine could not start." });
+    });
+
+    if (window.__scramjet) {
+      send("kyleos:web-shell-ready");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+{
+  "shards": [
+    {
+      "shard": "shard-01",
+      "gameCount": 24,
+      "totalBytes": 377627797
+    },
+    {
+      "shard": "shard-02",
+      "gameCount": 25,
+      "totalBytes": 377681780
+    },
+    {
+      "shard": "shard-03",
+      "gameCount": 28,
+      "totalBytes": 377633478
+    },
+    {
+      "shard": "shard-04",
+      "gameCount": 28,
+      "totalBytes": 377629163
+    },
+    {
+      "shard": "shard-05",
+      "gameCount": 24,
+      "totalBytes": 377834284
+    },
+    {
+      "shard": "shard-06",
+      "gameCount": 24,
+      "totalBytes": 378173845
+    },
+    {
+      "shard": "shard-07",
+      "gameCount": 28,
+      "totalBytes": 377624822
+    },
+    {
+      "shard": "shard-08",
+      "gameCount": 28,
+      "totalBytes": 377621770
+    },
+    {
+      "shard": "shard-09",
+      "gameCount": 25,
+      "totalBytes": 377693719
+    },
+    {
+      "shard": "shard-10",
+      "gameCount": 24,
+      "totalBytes": 377904284
+    },
+    {
+      "shard": "shard-11",
+      "gameCount": 28,
+      "totalBytes": 377623218
+    },
+    {
+      "shard": "shard-12",
+      "gameCount": 25,
+      "totalBytes": 377714119
+    }
+  ]
+}
