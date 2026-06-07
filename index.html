@@ -224,6 +224,29 @@
       </div>
     </section>
 
+    <section class="desktop-window update-log-window" id="app-update-log" data-app="update-log" hidden aria-label="Update Log">
+      <header class="window-bar">
+        <div>
+          <p class="eyebrow">system update</p>
+          <h1>Update Log</h1>
+        </div>
+        <div class="window-actions">
+          <button class="window-close" type="button" data-close-app="update-log" aria-label="Close Update Log">&times;</button>
+        </div>
+      </header>
+      <div class="update-log-panel">
+        <span class="update-badge">UV fix</span>
+        <h2>Ultraviolet browsing patched</h2>
+        <p>Brave searches through Ultraviolet now use the same URL encoder as the service worker, fixing the invalid URL crash.</p>
+        <ul>
+          <li>Fixed the <code>Failed to construct 'URL'</code> error in <code>uv.sw.js</code>.</li>
+          <li>Stopped Brave search URLs from turning into malformed proxied paths.</li>
+          <li>Kept the Scramjet and Ultraviolet engine switcher behavior unchanged.</li>
+        </ul>
+        <button class="update-log-dismiss" id="dismiss-update-log" type="button">Got it</button>
+      </div>
+    </section>
+
     <footer class="taskbar" aria-label="Taskbar">
       <div class="taskbar-apps">
         <button type="button" data-open-app="browser">Game Browser</button>

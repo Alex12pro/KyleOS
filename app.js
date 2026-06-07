@@ -32,6 +32,7 @@ const interactivePatternEl = document.querySelector("#setting-interactive-patter
 const settingsNoteEl = document.querySelector("#settings-note");
 const resetBrowserDataEl = document.querySelector("#reset-browser-data");
 const resetOsSettingsEl = document.querySelector("#reset-os-settings");
+const dismissUpdateLogEl = document.querySelector("#dismiss-update-log");
 const playerEl = document.querySelector("#player");
 const playerTitleEl = document.querySelector("#player-title");
 const playerFrameEl = document.querySelector("#player-frame");
@@ -44,6 +45,7 @@ const shardOrigins = window.GAME_SHARD_ORIGINS || {};
 const favoritesKey = "nss:favorites";
 const recentKey = "nss:recent";
 const settingsKey = "kyleos:settings";
+const updateLogSeenKey = "kyleos:update-log:uv-encoding-feabfc1";
 const defaultSettings = {
   customWallpaper: "",
   pattern: "grid",
@@ -85,6 +87,7 @@ const windowMinSizes = {
   recent: { width: 300, height: 250 },
   web: { width: 560, height: 380 },
   settings: { width: 420, height: 440 },
+  "update-log": { width: 360, height: 300 },
 };
 
 function readList(key) {
@@ -290,6 +293,29 @@ function playOpenAnimation(element) {
   window.setTimeout(() => {
     element.classList.remove("is-opening");
   }, 320);
+}
+
+function markUpdateLogSeen() {
+  try {
+    localStorage.setItem(updateLogSeenKey, "1");
+  } catch {
+    // If storage is unavailable, closing the window should still work.
+  }
+}
+
+function showUpdateLogOnce() {
+  try {
+    if (localStorage.getItem(updateLogSeenKey)) return;
+  } catch {
+    return;
+  }
+
+  window.setTimeout(() => openApp("update-log"), 420);
+}
+
+function dismissUpdateLog() {
+  markUpdateLogSeen();
+  closeApp("update-log");
 }
 
 function renderSettings() {
@@ -1130,6 +1156,10 @@ function closeApp(name) {
   const app = document.querySelector(`[data-app="${name}"]`);
   if (!app) return;
 
+  if (name === "update-log") {
+    markUpdateLogSeen();
+  }
+
   app.hidden = true;
   app.classList.remove("is-open", "is-minimized");
   clearSnap(app);
@@ -1252,6 +1282,7 @@ async function init() {
   setupDraggableWindows();
   setupInteractivePattern();
   setupSparkEffects();
+  showUpdateLogOnce();
   updateTaskbarState();
 }
 
@@ -1360,6 +1391,7 @@ customWallpaperInputEl?.addEventListener("change", () => {
   customWallpaperInputEl.value = "";
 });
 resetBrowserDataEl?.addEventListener("click", resetBrowserData);
+dismissUpdateLogEl?.addEventListener("click", dismissUpdateLog);
 resetOsSettingsEl?.addEventListener("click", () => {
   osSettings = { ...defaultSettings };
   writeSettings();
