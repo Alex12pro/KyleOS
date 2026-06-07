@@ -49,10 +49,10 @@ const defaultSettings = {
   reduceMotion: false,
 };
 const accentThemes = {
-  blue: { accent: "#53d8ff", hot: "#b8e7ff", spark: "#ff6fae" },
-  green: { accent: "#58f2a9", hot: "#c9ffe1", spark: "#53d8ff" },
-  rose: { accent: "#ff6fae", hot: "#ffd1e4", spark: "#f6c85f" },
-  gold: { accent: "#f6c85f", hot: "#fff1bd", spark: "#58f2a9" },
+  blue: { accent: "#53d8ff", hot: "#b8e7ff" },
+  green: { accent: "#58f2a9", hot: "#c9ffe1" },
+  rose: { accent: "#ff6fae", hot: "#ffd1e4" },
+  gold: { accent: "#f6c85f", hot: "#fff1bd" },
 };
 let games = [];
 let favoriteIds = readList(favoritesKey);
@@ -213,7 +213,6 @@ function applySettings() {
   const theme = accentThemes[osSettings.accent] || accentThemes.blue;
   document.documentElement.style.setProperty("--accent", theme.accent);
   document.documentElement.style.setProperty("--hot", theme.hot);
-  document.documentElement.style.setProperty("--spark", theme.spark);
   document.body.dataset.wallpaper = osSettings.wallpaper;
   document.body.classList.toggle("reduce-motion", osSettings.reduceMotion);
   updateClock();
@@ -242,12 +241,7 @@ function setupPointerGlow() {
 function burstSparks(event, count = 8) {
   if (!shouldAnimateEffects() || event.target.closest("iframe")) return;
 
-  const palette = [
-    getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#53d8ff",
-    getComputedStyle(document.documentElement).getPropertyValue("--spark").trim() || "#ff6fae",
-    "#58f2a9",
-    "#f6c85f",
-  ];
+  const accentColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#53d8ff";
 
   for (let index = 0; index < count; index += 1) {
     const spark = document.createElement("span");
@@ -259,7 +253,7 @@ function burstSparks(event, count = 8) {
     spark.style.top = `${event.clientY}px`;
     spark.style.setProperty("--spark-x", `${Math.cos(angle) * distance}px`);
     spark.style.setProperty("--spark-y", `${Math.sin(angle) * distance}px`);
-    spark.style.setProperty("--spark-color", palette[index % palette.length]);
+    spark.style.setProperty("--spark-color", accentColor);
     document.body.appendChild(spark);
     spark.addEventListener("animationend", () => spark.remove(), { once: true });
   }
