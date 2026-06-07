@@ -1,3 +1,8 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 const privateHostPatterns = [
   /^localhost$/i,
   /^127\./,
@@ -85,7 +90,7 @@ function extractSearchTarget(href) {
 
 async function fetchSearchResults(query) {
   const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const upstream = await fetch(searchUrl, {
+  const upstream = await fetchUpstream(searchUrl, {
     headers: {
       "User-Agent": "Mozilla/5.0 KyleOS/1.0",
       Accept: "text/html,application/xhtml+xml",
@@ -272,6 +277,153 @@ function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
 }
 
+function headerBag(headers) {
+  const normalized = new Map();
+  for (const [key, value] of Object.entries(headers)) {
+    normalized.set(key.toLowerCase(), value);
+  }
+
+  return {
+    get(name) {
+      return normalized.get(name.toLowerCase()) || null;
+    },
+  };
+}
+
+function parseCurlHeaders(rawHeaders) {
+  const blocks = rawHeaders
+    .split(/\r?\n\r?\n/)
+    .map((block) => block.trim())
+    .filter((block) => /^HTTP\//i.test(block));
+
+  const finalBlock = blocks.at(-1) || "";
+  const lines = finalBlock.split(/\r?\n/).filter(Boolean);
+  const status = Number(lines[0]?.match(/\s(\d{3})\s/)?.[1]) || 0;
+  const headers = {};
+
+  for (const line of lines.slice(1)) {
+    const separator = line.indexOf(":");
+    if (separator === -1) continue;
+
+    const key = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (!key || key === "transfer-encoding" || key === "content-length") continue;
+
+    headers[key] = headers[key] ? `${headers[key]}, ${value}` : value;
+  }
+
+  return { status, headers };
+}
+
+function runCurl(args) {
+  return new Promise((resolve, reject) => {
+    const curl = spawn(process.platform === "win32" ? "curl.exe" : "curl", args, {
+      windowsHide: true,
+    });
+    const stdout = [];
+    const stderr = [];
+
+    curl.stdout.on("data", (chunk) => stdout.push(chunk));
+    curl.stderr.on("data", (chunk) => stderr.push(chunk));
+    curl.on("error", reject);
+    curl.on("close", (code) => {
+      if (code === 0) {
+        resolve(Buffer.concat(stdout).toString("utf8").trim());
+        return;
+      }
+
+      reject(new Error(Buffer.concat(stderr).toString("utf8").trim() || `curl exited with ${code}`));
+    });
+  });
+}
+
+async function fetchWithCurl(targetUrl, options = {}) {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "kyleos-curl-"));
+  const headerPath = path.join(tempDir, "headers.txt");
+  const bodyPath = path.join(tempDir, "body.bin");
+  const method = options.method || "GET";
+  const headers = options.headers || {};
+
+  try {
+    const args = [
+      "--location",
+      "--silent",
+      "--show-error",
+      "--compressed",
+      "--max-redirs",
+      "10",
+      "--connect-timeout",
+      "10",
+      "--max-time",
+      "45",
+      "--proto",
+      "=http,https",
+      "--proto-redir",
+      "=http,https",
+      "--dump-header",
+      headerPath,
+      "--output",
+      bodyPath,
+      "--write-out",
+      "%{http_code}\n%{url_effective}",
+      "--user-agent",
+      headers["User-Agent"] || headers["user-agent"] || "KyleOS/1.0",
+    ];
+
+    if (method === "HEAD") {
+      args.push("--head");
+    }
+
+    if (headers.Accept || headers.accept) {
+      args.push("--header", `Accept: ${headers.Accept || headers.accept}`);
+    }
+
+    args.push(String(targetUrl));
+
+    const curlInfo = await runCurl(args);
+    const [statusLine, ...effectiveUrlParts] = curlInfo.split(/\r?\n/);
+    const { status: headerStatus, headers: responseHeaders } = parseCurlHeaders(await readFile(headerPath, "utf8"));
+    const body = method === "HEAD" ? Buffer.alloc(0) : await readFile(bodyPath);
+    const status = Number(statusLine) || headerStatus || 502;
+
+    return {
+      status,
+      ok: status >= 200 && status < 300,
+      url: effectiveUrlParts.join("\n") || String(targetUrl),
+      headers: headerBag(responseHeaders),
+      async text() {
+        return body.toString("utf8");
+      },
+      async arrayBuffer() {
+        return body;
+      },
+    };
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function fetchWithNode(targetUrl, options = {}) {
+  return fetch(targetUrl, {
+    ...options,
+    redirect: "follow",
+  });
+}
+
+async function fetchUpstream(targetUrl, options = {}) {
+  if (process.env.KYLEOS_DISABLE_LIBCURL !== "1") {
+    try {
+      return await fetchWithCurl(targetUrl, options);
+    } catch (error) {
+      if (process.env.KYLEOS_PROXY_DEBUG === "1") {
+        console.warn(`libcurl proxy request failed, falling back to fetch: ${error.message}`);
+      }
+    }
+  }
+
+  return fetchWithNode(targetUrl, options);
+}
+
 export async function handleProxyRequest(request, response) {
   setCorsHeaders(response);
 
@@ -320,12 +472,12 @@ export async function handleProxyRequest(request, response) {
     return;
   }
 
-  const upstream = await fetch(targetUrl, {
+  const upstream = await fetchUpstream(targetUrl, {
+    method: request.method,
     headers: {
       "User-Agent": "KyleOS/1.0",
       Accept: request.headers.accept || "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     },
-    redirect: "follow",
   });
 
   const contentType = upstream.headers.get("content-type") || "application/octet-stream";
