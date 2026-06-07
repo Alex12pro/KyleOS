@@ -9,7 +9,6 @@ const bootScreenEl = document.querySelector("#boot-screen");
 const bootStatusEl = document.querySelector("#boot-status");
 const batteryStatusEl = document.querySelector("#battery-status");
 const clockEl = document.querySelector("#clock");
-const cursorGlowEl = document.querySelector("#cursor-glow");
 const webAppEl = document.querySelector("#app-web");
 const webTabsListEl = document.querySelector("#web-tabs-list");
 const webNewTabEl = document.querySelector("#web-new-tab");
@@ -220,22 +219,6 @@ function applySettings() {
 
 function shouldAnimateEffects() {
   return !osSettings.reduceMotion && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-function setupPointerGlow() {
-  if (!cursorGlowEl) return;
-
-  window.addEventListener("pointermove", (event) => {
-    if (!shouldAnimateEffects()) return;
-
-    document.body.classList.add("has-pointer");
-    document.documentElement.style.setProperty("--cursor-x", `${event.clientX}px`);
-    document.documentElement.style.setProperty("--cursor-y", `${event.clientY}px`);
-  });
-
-  window.addEventListener("pointerleave", () => {
-    document.body.classList.remove("has-pointer");
-  });
 }
 
 function burstSparks(event, count = 8) {
@@ -1178,7 +1161,6 @@ async function init() {
   renderSettings();
   finishBoot("Ready");
   setupDraggableWindows();
-  setupPointerGlow();
   setupSparkEffects();
   updateTaskbarState();
 }
