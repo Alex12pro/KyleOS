@@ -25,66 +25,129 @@
 </head>
 <body>
   <iframe id="browser-page" title="Browser page" referrerpolicy="no-referrer" allow="fullscreen; autoplay; clipboard-read; clipboard-write"></iframe>
-  <script src="./scramjet-init.js"></script>
   <script>
     const tabId = decodeURIComponent(location.hash.slice(1) || "tab");
+    const params = new URLSearchParams(location.search);
+    const selectedEngine = params.get("engine") === "ultraviolet" ? "ultraviolet" : "scramjet";
     const pageFrame = document.querySelector("#browser-page");
-    const SCRAMJET_STARTUP_TIMEOUT = 30000;
-    let scramjetFrame = null;
-    let scramjetReadyPromise = null;
+    const ENGINE_STARTUP_TIMEOUT = 30000;
+    const engines = {
+      scramjet: {
+        label: "Scramjet",
+        script: "./scramjet-init.js",
+        global: "__scramjet",
+        errorGlobal: "__scramjetError",
+        readyEvent: "scramjet:ready",
+        errorEvent: "scramjet:error",
+        detailKey: "scramjet",
+      },
+      ultraviolet: {
+        label: "Ultraviolet",
+        script: "./ultraviolet-init.js",
+        global: "__ultraviolet",
+        errorGlobal: "__ultravioletError",
+        readyEvent: "ultraviolet:ready",
+        errorEvent: "ultraviolet:error",
+        detailKey: "ultraviolet",
+      },
+    };
+    const engineConfig = engines[selectedEngine];
+    let proxyFrame = null;
+    let proxyReadyPromise = null;
+    let proxyController = null;
 
     function send(type, detail = {}) {
-      window.parent.postMessage({ type, tabId, ...detail }, window.location.origin);
+      window.parent.postMessage({ type, tabId, engine: selectedEngine, ...detail }, window.location.origin);
     }
 
-    function waitForScramjet() {
-      if (window.__scramjet) {
-        return Promise.resolve(window.__scramjet);
+    function loadEngineScript() {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[data-engine="${selectedEngine}"]`);
+        if (existing?.dataset.loaded === "true") {
+          resolve();
+          return;
+        }
+
+        const script = existing || document.createElement("script");
+        script.dataset.engine = selectedEngine;
+        script.onload = () => {
+          script.dataset.loaded = "true";
+          resolve();
+        };
+        script.onerror = () => reject(new Error(`${engineConfig.label} failed to load.`));
+
+        if (!existing) {
+          script.src = engineConfig.script;
+          document.head.appendChild(script);
+        }
+      });
+    }
+
+    async function waitForProxyEngine() {
+      if (proxyController) {
+        return proxyController;
       }
 
-      if (window.__scramjetError) {
-        return Promise.reject(new Error(window.__scramjetError));
+      if (window[engineConfig.global]) {
+        proxyController = window[engineConfig.global];
+        return proxyController;
       }
 
-      if (!scramjetReadyPromise) {
-        scramjetReadyPromise = new Promise((resolve, reject) => {
+      if (window[engineConfig.errorGlobal]) {
+        throw new Error(window[engineConfig.errorGlobal]);
+      }
+
+      if (!proxyReadyPromise) {
+        proxyReadyPromise = new Promise(async (resolve, reject) => {
           let timeout;
           const cleanup = () => {
             window.clearTimeout(timeout);
-            window.removeEventListener("scramjet:ready", ready);
-            window.removeEventListener("scramjet:error", fail);
+            window.removeEventListener(engineConfig.readyEvent, ready);
+            window.removeEventListener(engineConfig.errorEvent, fail);
           };
           const resetAndReject = (error) => {
             cleanup();
-            scramjetReadyPromise = null;
+            proxyReadyPromise = null;
             reject(error);
           };
           const fail = (event) => {
-            resetAndReject(new Error(event.detail?.message || "Scramjet failed to initialize."));
+            resetAndReject(new Error(event.detail?.message || `${engineConfig.label} failed to initialize.`));
           };
           const ready = (event) => {
             cleanup();
-            scramjetReadyPromise = null;
-            resolve(event.detail.scramjet);
+            proxyReadyPromise = null;
+            proxyController = event.detail?.[engineConfig.detailKey] || window[engineConfig.global];
+            resolve(proxyController);
           };
 
           timeout = window.setTimeout(() => {
-            resetAndReject(new Error("Scramjet is still starting. Try again in a moment."));
-          }, SCRAMJET_STARTUP_TIMEOUT);
-          window.addEventListener("scramjet:ready", ready, { once: true });
-          window.addEventListener("scramjet:error", fail, { once: true });
+            resetAndReject(new Error(`${engineConfig.label} is still starting. Try again in a moment.`));
+          }, ENGINE_STARTUP_TIMEOUT);
+          window.addEventListener(engineConfig.readyEvent, ready, { once: true });
+          window.addEventListener(engineConfig.errorEvent, fail, { once: true });
+
+          try {
+            await loadEngineScript();
+            if (window[engineConfig.global]) {
+              ready({ detail: { [engineConfig.detailKey]: window[engineConfig.global] } });
+            } else if (window[engineConfig.errorGlobal]) {
+              fail({ detail: { message: window[engineConfig.errorGlobal] } });
+            }
+          } catch (error) {
+            resetAndReject(error);
+          }
         });
       }
 
-      return scramjetReadyPromise;
+      return proxyReadyPromise;
     }
 
-    async function ensureScramjetFrame() {
-      const scramjet = await waitForScramjet();
-      if (!scramjetFrame) {
-        scramjetFrame = scramjet.createFrame(pageFrame);
+    async function ensureProxyFrame() {
+      const engine = await waitForProxyEngine();
+      if (!proxyFrame) {
+        proxyFrame = engine.createFrame(pageFrame);
       }
-      return scramjetFrame;
+      return proxyFrame;
     }
 
     async function navigate(url) {
@@ -95,22 +158,22 @@
         return;
       }
 
-      const frame = await ensureScramjetFrame();
+      const frame = await ensureProxyFrame();
       frame.go(url);
     }
 
     window.addEventListener("message", async (event) => {
-      if (event.origin !== window.location.origin || event.data?.tabId !== tabId) return;
+      if (event.data?.tabId !== tabId || (event.origin !== window.location.origin && event.source !== window.parent)) return;
 
       try {
         if (event.data.type === "kyleos:web-go") {
           await navigate(event.data.url);
         } else if (event.data.type === "kyleos:web-back") {
-          scramjetFrame?.back?.();
+          proxyFrame?.back?.();
         } else if (event.data.type === "kyleos:web-forward") {
-          scramjetFrame?.forward?.();
+          proxyFrame?.forward?.();
         } else if (event.data.type === "kyleos:web-reload") {
-          scramjetFrame?.reload?.();
+          proxyFrame?.reload?.();
         } else if (event.data.type === "kyleos:web-blank") {
           pageFrame.src = "about:blank";
         }
@@ -123,17 +186,19 @@
       send("kyleos:web-shell-loaded");
     });
 
-    window.addEventListener("scramjet:ready", () => {
+    window.addEventListener(engineConfig.readyEvent, () => {
       send("kyleos:web-shell-ready");
     });
 
-    window.addEventListener("scramjet:error", (event) => {
+    window.addEventListener(engineConfig.errorEvent, (event) => {
       send("kyleos:web-shell-error", { message: event.detail?.message || "The browser engine could not start." });
     });
 
-    if (window.__scramjet) {
+    waitForProxyEngine().then(() => {
       send("kyleos:web-shell-ready");
-    }
+    }).catch((error) => {
+      send("kyleos:web-shell-error", { message: error.message || "The browser engine could not start." });
+    });
   </script>
 </body>
 </html>

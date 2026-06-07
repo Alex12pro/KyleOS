@@ -1166,6 +1166,22 @@ h1 {
   box-shadow: 0 0 16px currentColor;
 }
 
+.engine-dot {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 50%;
+  box-shadow: 0 0 16px currentColor;
+}
+
+.engine-scramjet {
+  background: linear-gradient(135deg, #53d8ff, #b8e7ff);
+}
+
+.engine-ultraviolet {
+  background: linear-gradient(135deg, #8b5cf6, #ff6fae);
+}
+
 .accent-blue {
   background: #53d8ff;
 }

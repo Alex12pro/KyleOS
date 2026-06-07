@@ -48,6 +48,7 @@ const defaultSettings = {
   customWallpaper: "",
   pattern: "grid",
   interactivePattern: true,
+  proxyEngine: "scramjet",
   accent: "blue",
   clock24: false,
   reduceMotion: false,
@@ -71,6 +72,10 @@ const snapEdgeSize = 26;
 let webLoadTimer = null;
 let scramjetReadyPromise = null;
 const SCRAMJET_STARTUP_TIMEOUT = 30000;
+const proxyEngineLabels = {
+  scramjet: "Scramjet",
+  ultraviolet: "Ultraviolet",
+};
 let webTabs = [];
 let activeWebTabId = null;
 let nextWebTabId = 1;
@@ -296,6 +301,10 @@ function renderSettings() {
     button.classList.toggle("is-selected", button.dataset.accent === osSettings.accent);
   });
 
+  document.querySelectorAll("button[data-proxy-engine]").forEach((button) => {
+    button.classList.toggle("is-selected", button.dataset.proxyEngine === osSettings.proxyEngine);
+  });
+
   if (clock24El) {
     clock24El.checked = osSettings.clock24;
   }
@@ -346,9 +355,10 @@ function resetBrowserData() {
     tab.historyIndex = -1;
     tab.title = "New Tab";
     tab.shellReady = false;
+    tab.shellBoot = (tab.shellBoot || 0) + 1;
     tab.shellWaiters.splice(0).forEach((waiter) => waiter.reject(new Error("Browser data was reset.")));
     if (tab.frameEl) {
-      tab.frameEl.src = `./browser-frame.html#${encodeURIComponent(tab.id)}`;
+      tab.frameEl.src = browserFrameUrl(tab.id, tab.shellBoot);
     }
     syncActiveWebTab();
   }
@@ -363,6 +373,28 @@ function resetBrowserData() {
   if (settingsNoteEl) {
     settingsNoteEl.textContent = "Browser tabs and session state reset.";
   }
+}
+
+function browserFrameUrl(tabId, bootId = 0) {
+  const engine = osSettings.proxyEngine || defaultSettings.proxyEngine;
+  return `./browser-frame.html?engine=${encodeURIComponent(engine)}&boot=${encodeURIComponent(bootId)}#${encodeURIComponent(tabId)}`;
+}
+
+function reloadWebFramesForEngine() {
+  webTabs.forEach((tab) => {
+    tab.history = [];
+    tab.historyIndex = -1;
+    tab.title = "New Tab";
+    tab.shellReady = false;
+    tab.shellBoot = (tab.shellBoot || 0) + 1;
+    tab.shellWaiters.splice(0).forEach((waiter) => waiter.reject(new Error("Proxy engine changed.")));
+
+    if (tab.frameEl) {
+      tab.frameEl.src = browserFrameUrl(tab.id, tab.shellBoot);
+    }
+  });
+
+  syncActiveWebTab();
 }
 
 function selectCustomWallpaper(file) {
@@ -801,7 +833,7 @@ function createWebFrame(tab, useExistingFrame = false) {
   frame.allow = "fullscreen; autoplay; clipboard-read; clipboard-write";
   frame.dataset.webTab = tab.id;
   frame.hidden = tab.id !== activeWebTabId;
-  frame.src = `./browser-frame.html#${encodeURIComponent(tab.id)}`;
+  frame.src = browserFrameUrl(tab.id, tab.shellBoot);
 
   if (!useExistingFrame) {
     webStageEl.appendChild(frame);
@@ -818,6 +850,7 @@ function createWebTab(url = "") {
     historyIndex: -1,
     frameEl: null,
     shellReady: false,
+    shellBoot: 0,
     shellWaiters: [],
   };
 
@@ -905,7 +938,7 @@ function closeWebTab(id) {
 
 async function navigateScramjet(tab, url) {
   await waitForWebShell(tab);
-  postWebShellCommand(tab, "kyleos:web-go", { url });
+  postWebShellCommand(tab, "kyleos:web-go", { url, engine: osSettings.proxyEngine });
 }
 
 function updateWebControls() {
@@ -936,10 +969,11 @@ async function loadWebUrl(url, shouldRecord = true) {
   webStartEl.hidden = true;
   window.clearTimeout(webLoadTimer);
   renderWebTabs();
+  const engineName = proxyEngineLabels[osSettings.proxyEngine] || "Proxy";
 
   setWebStatus(
     "Opening page...",
-    "Opening through Scramjet. Links and searches should stay inside this window."
+    `Opening through ${engineName}. Links and searches should stay inside this window.`
   );
   try {
     await navigateScramjet(tab, url);
@@ -947,12 +981,12 @@ async function loadWebUrl(url, shouldRecord = true) {
       if (activeWebTabId === tab.id && tab.historyIndex >= 0) {
         setWebStatus(
           "Still loading...",
-          "Scramjet is still working on this page. If it never appears, the site may block proxy browsers."
+          `${engineName} is still working on this page. If it never appears, the site may block proxy browsers.`
         );
       }
     }, 2800);
   } catch (error) {
-    setWebStatus("Scramjet is not ready", error.message || "Could not start the browser engine.");
+    setWebStatus(`${engineName} is not ready`, error.message || "Could not start the browser engine.");
   }
   updateWebControls();
 }
@@ -1014,17 +1048,8 @@ function toggleWebFullscreen() {
 }
 
 function renderScramjetStartupState() {
-  if (window.__scramjet) {
-    setWebStatus("Scramjet ready", "Type a search or URL to browse through the Scramjet engine.");
-    return;
-  }
-
-  if (window.__scramjetError) {
-    setWebStatus("Scramjet failed", window.__scramjetError);
-    return;
-  }
-
-  setWebStatus("Scramjet loading", "The browser engine is starting. Searches will open once it is ready.");
+  const engineName = proxyEngineLabels[osSettings.proxyEngine] || "Proxy";
+  setWebStatus(`${engineName} loading`, "The browser engine is starting. Searches will open once it is ready.");
 }
 
 function handleWebFrameLoad(tabId) {
@@ -1074,13 +1099,15 @@ function handleWebShellMessage(event) {
     tab.shellReady = true;
     tab.shellWaiters.splice(0).forEach((waiter) => waiter.resolve());
     if (tab.id === activeWebTabId && !tab.history.length) {
-      setWebStatus("Scramjet ready", "Type a search or URL to browse through the Scramjet engine.");
+      const engineName = proxyEngineLabels[event.data.engine || osSettings.proxyEngine] || "Proxy";
+      setWebStatus(`${engineName} ready`, `Type a search or URL to browse through the ${engineName} engine.`);
     }
   } else if (event.data.type === "kyleos:web-shell-error") {
     const error = new Error(event.data.message || "The browser tab could not load.");
     tab.shellWaiters.splice(0).forEach((waiter) => waiter.reject(error));
     if (tab.id === activeWebTabId) {
-      setWebStatus("Scramjet failed", error.message);
+      const engineName = proxyEngineLabels[event.data.engine || osSettings.proxyEngine] || "Proxy";
+      setWebStatus(`${engineName} failed`, error.message);
     }
   } else if (event.data.type === "kyleos:web-shell-loaded") {
     handleWebFrameLoad(tab.id);
@@ -1275,6 +1302,13 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const proxyEngineButton = event.target.closest("button[data-proxy-engine]");
+  if (proxyEngineButton) {
+    updateSettings({ proxyEngine: proxyEngineButton.dataset.proxyEngine }, "Proxy engine updated.");
+    reloadWebFramesForEngine();
+    return;
+  }
+
   const favoriteButton = event.target.closest("[data-favorite]");
   if (favoriteButton) {
     event.preventDefault();
@@ -1336,12 +1370,16 @@ resetOsSettingsEl?.addEventListener("click", () => {
   }
 });
 window.addEventListener("scramjet:ready", () => {
+  if (osSettings.proxyEngine !== "scramjet") return;
+
   const tab = activeWebTab();
   if (!tab || !tab.history.length) {
     setWebStatus("Scramjet ready", "Type a search or URL to browse through the Scramjet engine.");
   }
 });
 window.addEventListener("scramjet:error", (event) => {
+  if (osSettings.proxyEngine !== "scramjet") return;
+
   setWebStatus("Scramjet failed", event.detail?.message || "The browser engine could not start.");
 });
 window.addEventListener("message", handleWebShellMessage);

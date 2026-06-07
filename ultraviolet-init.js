@@ -1,52 +1,59 @@
 (async function () {
   const STARTUP_TIMEOUT = 30000;
-  const WORKER_URL = "/sj-sw.js?v=24";
-  const WORKER_SCOPE = "/sj/";
+  const WORKER_URL = "/uv-sw.js?v=1";
+  const WORKER_SCOPE = "/uv/service/";
 
   if (!("serviceWorker" in navigator)) {
     fail("Service workers are not supported in this browser.");
     return;
   }
 
-  await loadScript("/sj-v2-assets/scramjet_bundled.js", { retries: 2, timeout: STARTUP_TIMEOUT });
-  await loadScript("/sj-v2-assets/sj-v2-core.js", { retries: 2, timeout: STARTUP_TIMEOUT });
+  await loadScript("/uv/uv.bundle.js", { retries: 2, timeout: STARTUP_TIMEOUT });
+  await loadScript("/uv/uv.config.js", { retries: 2, timeout: STARTUP_TIMEOUT });
+  await withTimeout(setupBareMuxTransport(), STARTUP_TIMEOUT, "Ultraviolet transport did not become ready in time.");
 
-  const registration = await navigator.serviceWorker.register(WORKER_URL, { scope: WORKER_SCOPE });
+  const registration = await withTimeout(
+    navigator.serviceWorker.register(WORKER_URL, { scope: WORKER_SCOPE }),
+    STARTUP_TIMEOUT,
+    "Ultraviolet service worker registration timed out."
+  );
   await waitForActiveServiceWorker(registration, STARTUP_TIMEOUT);
 
-  const scramjet = createCompatController();
+  const ultraviolet = createUltravioletController();
 
-  console.log(`[scramjet] Ready v${window.__scramjetV2.version()}`);
-  window.__scramjet = scramjet;
-  window.__scramjetReady = true;
-  window.scramjetEncode = (url) => window.__scramjetV2.rewriteTopUrl(url);
+  window.__ultraviolet = ultraviolet;
+  window.__ultravioletReady = true;
 
   const dispatchReady = () => {
-    window.dispatchEvent(new CustomEvent("scramjet:ready", { detail: { scramjet } }));
+    window.dispatchEvent(new CustomEvent("ultraviolet:ready", { detail: { ultraviolet } }));
   };
 
   dispatchReady();
 })().catch((error) => {
-  console.error("[scramjet] Failed to initialize", error);
-  fail(error?.stack || error?.message || String(error) || "Scramjet failed to initialize.");
+  console.error("[ultraviolet] Failed to initialize", error);
+  fail(error?.stack || error?.message || String(error) || "Ultraviolet failed to initialize.");
 });
 
-function createCompatController() {
+function createUltravioletController() {
+  const UltravioletCtor = self.Ultraviolet;
+  if (typeof UltravioletCtor === "undefined") {
+    throw new Error("Ultraviolet bundle did not expose a browser controller.");
+  }
+
+  const uv = new UltravioletCtor();
+
   return {
-    prefix: "/sj/",
-    async init() {},
+    prefix: self.__uv$config.prefix,
     encodeUrl(url) {
-      return window.__scramjetV2.rewriteTopUrl(url);
+      return `${self.__uv$config.prefix}${uv.encodeUrl(url)}`;
     },
     createFrame(existingFrame) {
       const frame = existingFrame || document.createElement("iframe");
-      frame.name = frame.name || `scramjet-frame-${Math.random().toString(36).slice(2)}`;
 
       return {
         frame,
         go(url) {
-          frame.src = window.__scramjetV2.rewriteTopUrl(url);
-          console.log("[scramjet] navigate -> go navigated to", url);
+          frame.src = `${self.__uv$config.prefix}${uv.encodeUrl(url)}`;
         },
         back() {
           safeFrameHistory(frame, "back");
@@ -66,6 +73,13 @@ function createCompatController() {
   };
 }
 
+async function setupBareMuxTransport() {
+  const { BareMuxConnection } = await import("/uv-mux/index.js");
+  const { BareClient } = await import("/sj-assets/bare-as-module3.js");
+  const connection = new BareMuxConnection("/uv-mux/worker.js");
+  await connection.setRemoteTransport(new BareClient(`${location.origin}/api/bare/`), "KyleOS Bare v3");
+}
+
 function safeFrameHistory(frame, method) {
   try {
     frame.contentWindow.history[method]();
@@ -75,8 +89,8 @@ function safeFrameHistory(frame, method) {
 }
 
 function fail(message) {
-  window.__scramjetError = message;
-  window.dispatchEvent(new CustomEvent("scramjet:error", { detail: { message } }));
+  window.__ultravioletError = message;
+  window.dispatchEvent(new CustomEvent("ultraviolet:error", { detail: { message } }));
 }
 
 async function loadScript(src, options = {}) {
@@ -88,7 +102,7 @@ async function loadScript(src, options = {}) {
       await loadScriptOnce(src, timeout);
       return;
     } catch (error) {
-      document.querySelector(`script[data-scramjet-src="${src}"]`)?.remove();
+      document.querySelector(`script[data-ultraviolet-src="${src}"]`)?.remove();
 
       if (attempt >= retries) {
         throw new Error(`Could not load ${src}: ${error?.message || "network error"}`);
@@ -101,7 +115,7 @@ async function loadScript(src, options = {}) {
 
 function loadScriptOnce(src, timeout) {
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[data-scramjet-src="${src}"]`);
+    const existing = document.querySelector(`script[data-ultraviolet-src="${src}"]`);
     if (existing?.dataset.loaded === "true") {
       resolve();
       return;
@@ -115,7 +129,7 @@ function loadScriptOnce(src, timeout) {
       script.onerror = null;
     };
 
-    script.dataset.scramjetSrc = src;
+    script.dataset.ultravioletSrc = src;
     script.onload = () => {
       cleanup();
       script.dataset.loaded = "true";
@@ -146,7 +160,7 @@ function waitForActiveServiceWorker(registration, timeout) {
   const readyPromise = navigator.serviceWorker.ready.then((readyRegistration) => readyRegistration.active);
 
   if (!worker) {
-    return withTimeout(readyPromise, timeout, "Scramjet service worker did not become ready in time.");
+    return withTimeout(readyPromise, timeout, "Ultraviolet service worker did not become ready in time.");
   }
 
   const workerPromise = new Promise((resolve) => {
@@ -172,7 +186,7 @@ function waitForActiveServiceWorker(registration, timeout) {
   return withTimeout(
     Promise.race([workerPromise, readyPromise]),
     timeout,
-    "Scramjet service worker did not activate in time."
+    "Ultraviolet service worker did not activate in time."
   );
 }
 
