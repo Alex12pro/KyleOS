@@ -9,6 +9,7 @@ const bootScreenEl = document.querySelector("#boot-screen");
 const bootStatusEl = document.querySelector("#boot-status");
 const batteryStatusEl = document.querySelector("#battery-status");
 const clockEl = document.querySelector("#clock");
+const cursorGlowEl = document.querySelector("#cursor-glow");
 const webAppEl = document.querySelector("#app-web");
 const webTabsListEl = document.querySelector("#web-tabs-list");
 const webNewTabEl = document.querySelector("#web-new-tab");
@@ -48,10 +49,10 @@ const defaultSettings = {
   reduceMotion: false,
 };
 const accentThemes = {
-  blue: { accent: "#53d8ff", hot: "#b8e7ff" },
-  green: { accent: "#58f2a9", hot: "#c9ffe1" },
-  rose: { accent: "#ff6fae", hot: "#ffd1e4" },
-  gold: { accent: "#f6c85f", hot: "#fff1bd" },
+  blue: { accent: "#53d8ff", hot: "#b8e7ff", spark: "#ff6fae" },
+  green: { accent: "#58f2a9", hot: "#c9ffe1", spark: "#53d8ff" },
+  rose: { accent: "#ff6fae", hot: "#ffd1e4", spark: "#f6c85f" },
+  gold: { accent: "#f6c85f", hot: "#fff1bd", spark: "#58f2a9" },
 };
 let games = [];
 let favoriteIds = readList(favoritesKey);
@@ -212,9 +213,76 @@ function applySettings() {
   const theme = accentThemes[osSettings.accent] || accentThemes.blue;
   document.documentElement.style.setProperty("--accent", theme.accent);
   document.documentElement.style.setProperty("--hot", theme.hot);
+  document.documentElement.style.setProperty("--spark", theme.spark);
   document.body.dataset.wallpaper = osSettings.wallpaper;
   document.body.classList.toggle("reduce-motion", osSettings.reduceMotion);
   updateClock();
+}
+
+function shouldAnimateEffects() {
+  return !osSettings.reduceMotion && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function setupPointerGlow() {
+  if (!cursorGlowEl) return;
+
+  window.addEventListener("pointermove", (event) => {
+    if (!shouldAnimateEffects()) return;
+
+    document.body.classList.add("has-pointer");
+    document.documentElement.style.setProperty("--cursor-x", `${event.clientX}px`);
+    document.documentElement.style.setProperty("--cursor-y", `${event.clientY}px`);
+  });
+
+  window.addEventListener("pointerleave", () => {
+    document.body.classList.remove("has-pointer");
+  });
+}
+
+function burstSparks(event, count = 8) {
+  if (!shouldAnimateEffects() || event.target.closest("iframe")) return;
+
+  const palette = [
+    getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#53d8ff",
+    getComputedStyle(document.documentElement).getPropertyValue("--spark").trim() || "#ff6fae",
+    "#58f2a9",
+    "#f6c85f",
+  ];
+
+  for (let index = 0; index < count; index += 1) {
+    const spark = document.createElement("span");
+    const angle = (Math.PI * 2 * index) / count + Math.random() * 0.45;
+    const distance = 24 + Math.random() * 46;
+
+    spark.className = "vfx-spark";
+    spark.style.left = `${event.clientX}px`;
+    spark.style.top = `${event.clientY}px`;
+    spark.style.setProperty("--spark-x", `${Math.cos(angle) * distance}px`);
+    spark.style.setProperty("--spark-y", `${Math.sin(angle) * distance}px`);
+    spark.style.setProperty("--spark-color", palette[index % palette.length]);
+    document.body.appendChild(spark);
+    spark.addEventListener("animationend", () => spark.remove(), { once: true });
+  }
+}
+
+function setupSparkEffects() {
+  document.addEventListener("pointerdown", (event) => {
+    const interactiveTarget = event.target.closest("button, a, input, .window-bar, .player-topbar");
+    if (interactiveTarget) {
+      burstSparks(event, interactiveTarget.matches("input") ? 4 : 9);
+    }
+  });
+}
+
+function playOpenAnimation(element) {
+  if (!element || !shouldAnimateEffects()) return;
+
+  element.classList.remove("is-opening");
+  void element.offsetWidth;
+  element.classList.add("is-opening");
+  window.setTimeout(() => {
+    element.classList.remove("is-opening");
+  }, 320);
 }
 
 function renderSettings() {
@@ -988,6 +1056,7 @@ function openApp(name) {
   app.classList.add("is-open");
   app.classList.remove("is-minimized");
   bringToFront(app);
+  playOpenAnimation(app);
   updateTaskbarState();
 }
 
@@ -1068,6 +1137,7 @@ function openGame(game) {
   playerFrameEl.src = gameUrl(game);
   playerEl.hidden = false;
   bringToFront(playerEl);
+  playOpenAnimation(playerEl);
   document.body.classList.add("is-playing");
 }
 
@@ -1114,6 +1184,8 @@ async function init() {
   renderSettings();
   finishBoot("Ready");
   setupDraggableWindows();
+  setupPointerGlow();
+  setupSparkEffects();
   updateTaskbarState();
 }
 
