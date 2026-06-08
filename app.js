@@ -844,8 +844,8 @@ function titleForWebUrl(url) {
 
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === "search.brave.com") return "Brave Search";
-    return parsed.hostname.replace(/^www\./, "");
+    if (parsed.hostname === "search.brave.com") return "Search";
+    return "Private Tab";
   } catch {
     return "Page";
   }
@@ -918,7 +918,7 @@ function syncActiveWebTab() {
     }
   });
 
-  webAddressEl.value = tab.history[tab.historyIndex] || "";
+  webAddressEl.value = "";
   webStartEl.hidden = tab.historyIndex >= 0;
   if (tab.historyIndex < 0) {
     renderScramjetStartupState();
@@ -991,7 +991,7 @@ async function loadWebUrl(url, shouldRecord = true) {
   }
 
   tab.title = titleForWebUrl(url);
-  webAddressEl.value = url;
+  webAddressEl.value = "";
   webStartEl.hidden = true;
   window.clearTimeout(webLoadTimer);
   renderWebTabs();

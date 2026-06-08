@@ -19,7 +19,7 @@ function isBlockedHost(hostname) {
 }
 
 function rewriteUrl(value, baseUrl) {
-  if (!value || /^(data|mailto|tel|javascript):/i.test(value)) {
+  if (!value || value.startsWith("#") || /^(data|mailto|tel|javascript):/i.test(value)) {
     return value;
   }
 
@@ -66,16 +66,9 @@ function proxiedUrl(url) {
 }
 
 function searchResult({ title, url, description }) {
-  let hostname = url;
-  try {
-    hostname = new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    hostname = url;
-  }
-
   return `
-    <a class="result" href="${proxiedUrl(url)}" data-target-url="${escapeHtml(url)}">
-      <span>${escapeHtml(hostname)}</span>
+    <a class="result" href="#" data-proxy-url="${escapeHtml(proxiedUrl(url))}">
+      <span>Web result</span>
       <strong>${escapeHtml(title)}</strong>
       <p>${escapeHtml(description)}</p>
     </a>
@@ -200,6 +193,14 @@ function renderSearchPage(query, results) {
       ${resultItems.map(searchResult).join("")}
     </section>
   </main>
+  <script>
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest("a[data-proxy-url]");
+      if (!link) return;
+      event.preventDefault();
+      location.href = link.dataset.proxyUrl;
+    });
+  </script>
 </body>
 </html>`;
 }
@@ -208,6 +209,18 @@ function rewriteHtml(html, targetUrl) {
   let output = html.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
 
   output = output.replace(/\s(target)=["'][^"']*["']/gi, "");
+
+  output = output.replace(
+    /<a\b([^>]*?)\shref=["']([^"']+)["']([^>]*)>/gi,
+    (match, before, value, after) => {
+      const rewritten = rewriteUrl(value, targetUrl);
+      if (!rewritten || rewritten === value) {
+        return match;
+      }
+
+      return `<a${before} href="#" data-proxy-url="${escapeHtml(rewritten)}"${after}>`;
+    }
+  );
 
   output = output.replace(
     /\s(href|src|action)=["']([^"']+)["']/gi,
@@ -236,6 +249,12 @@ function rewriteHtml(html, targetUrl) {
   document.addEventListener("click", (event) => {
     const link = event.target.closest("a[href]");
     if (!link) return;
+    const proxyUrl = link.dataset.proxyUrl;
+    if (proxyUrl) {
+      event.preventDefault();
+      location.href = proxyUrl;
+      return;
+    }
     const href = link.getAttribute("href");
     if (!href || href.startsWith("#") || href.startsWith("data:") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) return;
     event.preventDefault();
