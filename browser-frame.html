@@ -181,13 +181,13 @@
     async function navigate(url) {
       if (!url) return;
 
-      if (!engineConfig) {
-        openWithHiddenProxy(url);
+      if (url.startsWith("/api/v1/data?") || url.startsWith("/api/proxy?")) {
+        pageFrame.src = url;
         return;
       }
 
-      if (url.startsWith("/api/v1/data?") || url.startsWith("/api/proxy?")) {
-        pageFrame.src = url;
+      if (!engineConfig) {
+        await openWithHiddenProxy(url);
         return;
       }
 

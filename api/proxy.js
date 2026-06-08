@@ -370,7 +370,7 @@ async function readPostedUrl(request) {
 
 function validateProxyUrl(rawUrl) {
   try {
-    const targetUrl = new URL(rawUrl);
+    const targetUrl = new URL(rawUrl, "http://localhost");
     if (!["http:", "https:"].includes(targetUrl.protocol) || isBlockedHost(targetUrl.hostname)) {
       return null;
     }
