@@ -60,6 +60,13 @@ async function handleScramjetFetch(event) {
   try {
     const request = event.request;
     const client = event.clientId ? await self.clients.get(event.clientId) : null;
+    const isDocumentNavigation = request.mode === "navigate" && request.destination === "document";
+    const isDirectTopLevelNavigation = isDocumentNavigation && !event.clientId;
+
+    if (isDirectTopLevelNavigation) {
+      return Response.redirect(new URL("/site.html", self.location.origin), 302);
+    }
+
     const hasBody = !["GET", "HEAD"].includes(request.method);
     const response = await scramjetHandler.handleFetch({
       rawUrl: new URL(request.url),

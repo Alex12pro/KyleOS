@@ -1,4 +1,9 @@
 (function () {
+  if (self.top === self && self.location.pathname.startsWith("/sj/")) {
+    self.location.replace("/site.html");
+    return;
+  }
+
   const scramjet = self.$scramjet;
   const bridge = self.__scramjetV2;
 

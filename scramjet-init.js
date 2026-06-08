@@ -1,6 +1,6 @@
 (async function () {
   const STARTUP_TIMEOUT = 30000;
-  const WORKER_URL = "/sj-sw.js?v=24";
+  const WORKER_URL = "/sj-sw.js?v=25";
   const WORKER_SCOPE = "/sj/";
 
   if (!("serviceWorker" in navigator)) {
