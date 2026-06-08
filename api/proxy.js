@@ -5,6 +5,7 @@ import path from "node:path";
 
 const proxyTargets = new Map();
 const maxProxyTargets = 1200;
+const hiddenProxyPath = "/api/v1/data";
 
 const privateHostPatterns = [
   /^localhost$/i,
@@ -39,19 +40,20 @@ function rewriteUrl(value, baseUrl) {
 }
 
 function rememberProxyTarget(url) {
-  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
-  proxyTargets.set(id, { url, createdAt: Date.now() });
+  const token = Buffer.from(`${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}:${url}`)
+    .toString("base64url");
+  proxyTargets.set(token, { url, createdAt: Date.now() });
 
   if (proxyTargets.size > maxProxyTargets) {
     const oldest = [...proxyTargets.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt)[0]?.[0];
     if (oldest) proxyTargets.delete(oldest);
   }
 
-  return id;
+  return token;
 }
 
-function lookupProxyTarget(id) {
-  return proxyTargets.get(id)?.url || "";
+function lookupProxyTarget(token) {
+  return proxyTargets.get(token)?.url || "";
 }
 
 function escapeHtml(value) {
@@ -81,7 +83,7 @@ function stripTags(value) {
 }
 
 function proxiedUrl(url) {
-  return `/api/proxy?id=${encodeURIComponent(rememberProxyTarget(url))}`;
+  return `${hiddenProxyPath}?_token=${encodeURIComponent(rememberProxyTarget(url))}`;
 }
 
 function searchResult({ title, url, description }) {
@@ -204,7 +206,7 @@ function renderSearchPage(query, results) {
       <h1>Search <span>${escapeHtml(query)}</span></h1>
       <p>Results open through Kyle OS so you stay inside this browser window.</p>
     </header>
-    <form class="search-box" action="/api/proxy" method="get">
+    <form class="search-box" action="${hiddenProxyPath}" method="get">
       <input name="search" value="${escapeHtml(query)}" autocomplete="off" autofocus>
       <button type="submit">Search</button>
     </form>
@@ -267,7 +269,7 @@ function rewriteHtml(html, targetUrl) {
   const openProxied = (url) => {
     const form = document.createElement("form");
     form.method = "post";
-    form.action = "/api/proxy";
+    form.action = "${hiddenProxyPath}";
     form.style.display = "none";
     const input = document.createElement("input");
     input.type = "hidden";
@@ -289,7 +291,7 @@ function rewriteHtml(html, targetUrl) {
     const href = link.getAttribute("href");
     if (!href || href.startsWith("#") || href.startsWith("data:") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) return;
     event.preventDefault();
-    if (href.startsWith("/api/proxy?")) {
+    if (href.startsWith("${hiddenProxyPath}?") || href.startsWith("/api/proxy?")) {
       location.href = href;
       return;
     }
@@ -519,7 +521,7 @@ export async function handleProxyRequest(request, response) {
 
   const requestUrl = new URL(request.url, "http://localhost");
   const rawUrl = requestUrl.searchParams.get("url")
-    || lookupProxyTarget(requestUrl.searchParams.get("id") || "")
+    || lookupProxyTarget(requestUrl.searchParams.get("_token") || requestUrl.searchParams.get("id") || "")
     || (request.method === "POST" ? await readPostedUrl(request) : "");
   const searchQuery = requestUrl.searchParams.get("search");
 

@@ -65,7 +65,7 @@
 
       const form = document.createElement("form");
       form.method = "post";
-      form.action = "/api/proxy";
+      form.action = "/api/v1/data";
       form.target = pageFrame.name || `browser-page-${tabId}`;
       form.style.display = "none";
 
@@ -187,7 +187,7 @@
         return;
       }
 
-      if (url.startsWith("/api/proxy?")) {
+      if (url.startsWith("/api/v1/data?") || url.startsWith("/api/proxy?")) {
         pageFrame.src = url;
         return;
       }

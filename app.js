@@ -786,7 +786,7 @@ function normalizeWebTarget(value) {
 }
 
 function isInternalWebUrl(url) {
-  return url.startsWith("/api/proxy?");
+  return url.startsWith("/api/v1/data?") || url.startsWith("/api/proxy?");
 }
 
 function setWebStatus(title, message) {
