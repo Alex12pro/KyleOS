@@ -782,7 +782,7 @@ function normalizeWebTarget(value) {
     return `https://${trimmed}`;
   }
 
-  return `https://search.brave.com/search?q=${encodeURIComponent(trimmed)}`;
+  return `/api/v1/data?search=${encodeURIComponent(trimmed)}`;
 }
 
 function isInternalWebUrl(url) {
@@ -842,6 +842,7 @@ function activeWebTab() {
 
 function titleForWebUrl(url) {
   if (!url) return "New Tab";
+  if (url.startsWith("/api/v1/data?search=")) return "Search";
 
   try {
     const parsed = new URL(url);
