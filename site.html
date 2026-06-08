@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kyle OS</title>
+  <script>
+    if (sessionStorage.getItem("kyleos:gateway") !== "unlocked") {
+      window.location.replace("./index.html");
+    }
+  </script>
+  <link rel="icon" href="./assets/logo.png" type="image/png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="vfx-layer" aria-hidden="true">
+    <span class="vfx-grid"></span>
+    <span class="vfx-ribbon vfx-ribbon-one"></span>
+    <span class="vfx-ribbon vfx-ribbon-two"></span>
+    <span class="vfx-scanlines"></span>
+    <span class="vfx-noise"></span>
+  </div>
+
+  <section class="boot-screen" id="boot-screen" aria-live="polite">
+    <img src="./assets/logo.png" alt="">
+    <strong>Kyle OS</strong>
+    <span id="boot-status">Loading games...</span>
+    <div class="boot-progress" aria-hidden="true"><span></span></div>
+  </section>
+
+  <main class="desktop" aria-label="Desktop">
+    <header class="desktop-bar">
+      <div class="brand-pill">
+        <img src="./assets/logo.png" alt="">
+        <span>Kyle OS</span>
+      </div>
+      <p id="summary">Loading games...</p>
+    </header>
+
+    <section class="desktop-icons" aria-label="Applications">
+      <button class="desktop-icon" type="button" data-open-app="browser">
+        <span class="icon-tile app-symbol browser-symbol" aria-hidden="true">
+          <i></i><i></i><i></i><i></i>
+        </span>
+        <strong>Game Browser</strong>
+      </button>
+      <button class="desktop-icon" type="button" data-open-app="continue">
+        <span class="icon-tile app-symbol continue-symbol" aria-hidden="true">
+          <i></i>
+        </span>
+        <strong>Continue Playing</strong>
+      </button>
+      <button class="desktop-icon" type="button" data-open-app="recent">
+        <span class="icon-tile app-symbol recent-symbol" aria-hidden="true">
+          <i></i>
+        </span>
+        <strong>Recently Played</strong>
+      </button>
+      <button class="desktop-icon" type="button" data-open-app="web">
+        <span class="icon-tile app-symbol web-symbol" aria-hidden="true">
+          <i></i>
+        </span>
+        <strong>Brave Web</strong>
+      </button>
+      <button class="desktop-icon" type="button" data-open-app="settings">
+        <span class="icon-tile app-symbol settings-symbol" aria-hidden="true">
+          <i></i>
+        </span>
+        <strong>Settings</strong>
+      </button>
+      <div class="favorite-shortcuts" id="favorite-shortcuts"></div>
+    </section>
+
+    <section class="desktop-window is-open" id="app-browser" data-app="browser" aria-label="Game Browser">
+      <header class="window-bar">
+        <div>
+          <p class="eyebrow">application</p>
+          <h1>Game Browser</h1>
+        </div>
+        <div class="window-actions">
+          <button class="window-minimize" type="button" data-minimize-app="browser" aria-label="Minimize Game Browser" title="Minimize">-</button>
+          <button class="window-close" type="button" data-close-app="browser" aria-label="Close Game Browser">&times;</button>
+        </div>
+      </header>
+      <div class="browser-tools">
+        <label class="search-wrap" for="search">
+          <span>Search</span>
+          <input id="search" type="search" autocomplete="off" placeholder="Find a game">
+        </label>
+        <span id="count"></span>
+      </div>
+      <ol class="game-list" id="games"></ol>
+    </section>
+
+    <section class="desktop-window compact-window" id="app-continue" data-app="continue" hidden aria-label="Continue Playing">
+      <header class="window-bar">
+        <div>
+          <p class="eyebrow">application</p>
+          <h1>Continue Playing</h1>
+        </div>
+        <div class="window-actions">
+          <button class="window-minimize" type="button" data-minimize-app="continue" aria-label="Minimize Continue Playing" title="Minimize">-</button>
+          <button class="window-close" type="button" data-close-app="continue" aria-label="Close Continue Playing">&times;</button>
+        </div>
+      </header>
+      <div class="feature-slot" id="continue-game"></div>
+    </section>
+
+    <section class="desktop-window compact-window" id="app-recent" data-app="recent" hidden aria-label="Recently Played">
+      <header class="window-bar">
+        <div>
+          <p class="eyebrow">application</p>
+          <h1>Recently Played</h1>
+        </div>
+        <div class="window-actions">
+          <button class="window-minimize" type="button" data-minimize-app="recent" aria-label="Minimize Recently Played" title="Minimize">-</button>
+          <button class="window-close" type="button" data-close-app="recent" aria-label="Close Recently Played">&times;</button>
+        </div>
+      </header>
+      <ol class="compact-list" id="recent"></ol>
+    </section>
+
+    <section class="desktop-window web-window" id="app-web" data-app="web" hidden aria-label="Brave Web">
+      <header class="window-bar">
+        <div>
+          <p class="eyebrow">application</p>
+          <h1>Brave Web</h1>
+        </div>
+        <div class="window-actions">
+          <button class="window-minimize" type="button" data-minimize-app="web" aria-label="Minimize Brave Web" title="Minimize">-</button>
+          <button class="window-close" type="button" data-close-app="web" aria-label="Close Brave Web">&times;</button>
+        </div>
+      </header>
+      <div class="web-tabs" aria-label="Browser tabs">
+        <div class="web-tabs-list" id="web-tabs-list" role="tablist" aria-label="Open tabs"></div>
+        <button class="web-new-tab" id="web-new-tab" type="button" aria-label="New tab" title="New tab">+</button>
+      </div>
+      <form class="web-tools" id="web-form">
+        <button type="button" id="web-back" aria-label="Back" title="Back">&larr;</button>
+        <button type="button" id="web-forward" aria-label="Forward" title="Forward">&rarr;</button>
+        <button type="button" id="web-refresh" aria-label="Refresh" title="Refresh">&#8635;</button>
+        <input id="web-address" type="text" autocomplete="off" spellcheck="false" placeholder="Brave Search or enter a URL">
+        <button type="submit">Go</button>
+        <button type="button" id="web-fullscreen" aria-label="Fullscreen" title="Fullscreen">Full</button>
+      </form>
+      <div class="web-stage">
+        <div class="web-start" id="web-start">
+          <strong>Brave Search</strong>
+          <span>Search or enter a website above.</span>
+        </div>
+        <div class="web-status" id="web-status" hidden>
+          <strong id="web-status-title">Opening page...</strong>
+          <span id="web-status-message">Opening through Scramjet.</span>
+        </div>
+        <iframe class="web-frame" id="web-frame" title="Brave Web" referrerpolicy="no-referrer" allow="fullscreen; autoplay; clipboard-read; clipboard-write"></iframe>
+      </div>
+    </section>
+
+    <section class="desktop-window settings-window" id="app-settings" data-app="settings" hidden aria-label="Settings">
+      <header class="window-bar">
+        <div>
+          <p class="eyebrow">application</p>
+          <h1>Settings</h1>
+        </div>
+        <div class="window-actions">
+          <button class="window-minimize" type="button" data-minimize-app="settings" aria-label="Minimize Settings" title="Minimize">-</button>
+          <button class="window-close" type="button" data-close-app="settings" aria-label="Close Settings">&times;</button>
+        </div>
+      </header>
+      <div class="settings-panel">
+        <section class="settings-group">
+          <h2>Wallpaper</h2>
+          <div class="wallpaper-picker">
+            <span class="wallpaper-preview custom-wallpaper-preview" id="custom-wallpaper-preview"></span>
+            <label class="wallpaper-upload" for="custom-wallpaper-input">
+              <span>Select custom wallpaper</span>
+              <input id="custom-wallpaper-input" type="file" accept="image/*">
+            </label>
+          </div>
+        </section>
+        <section class="settings-group">
+          <h2>Patterns</h2>
+          <div class="settings-options" id="pattern-options">
+            <button type="button" data-pattern="none"><span class="pattern-preview pattern-none"></span>None</button>
+            <button type="button" data-pattern="grid"><span class="pattern-preview pattern-grid"></span>Grid</button>
+            <button type="button" data-pattern="circuit"><span class="pattern-preview pattern-circuit"></span>Circuit</button>
+            <button type="button" data-pattern="pulse"><span class="pattern-preview pattern-pulse"></span>Pulse</button>
+          </div>
+          <label class="settings-row">
+            <span>Interactive pattern</span>
+            <input id="setting-interactive-pattern" type="checkbox">
+          </label>
+        </section>
+        <section class="settings-group">
+          <h2>Accent</h2>
+          <div class="settings-options" id="accent-options">
+            <button type="button" data-accent="blue"><span class="accent-dot accent-blue"></span>Blue</button>
+            <button type="button" data-accent="green"><span class="accent-dot accent-green"></span>Green</button>
+            <button type="button" data-accent="rose"><span class="accent-dot accent-rose"></span>Rose</button>
+            <button type="button" data-accent="gold"><span class="accent-dot accent-gold"></span>Gold</button>
+          </div>
+        </section>
+        <section class="settings-group">
+          <h2>Proxy Engine</h2>
+          <div class="settings-options" id="proxy-engine-options">
+            <button type="button" data-proxy-engine="scramjet"><span class="engine-dot engine-scramjet"></span>Scramjet</button>
+            <button type="button" data-proxy-engine="ultraviolet"><span class="engine-dot engine-ultraviolet"></span>Ultraviolet</button>
+          </div>
+        </section>
+        <section class="settings-group">
+          <h2>System</h2>
+          <label class="settings-row">
+            <span>24-hour clock</span>
+            <input id="setting-clock-24" type="checkbox">
+          </label>
+          <label class="settings-row">
+            <span>Reduce animation</span>
+            <input id="setting-reduce-motion" type="checkbox">
+          </label>
+        </section>
+        <section class="settings-group">
+          <h2>Reset</h2>
+          <div class="settings-actions">
+            <button type="button" id="reset-browser-data">Browser data</button>
+            <button type="button" id="reset-os-settings">OS settings</button>
+          </div>
+          <p class="settings-note" id="settings-note" aria-live="polite"></p>
+        </section>
+      </div>
+    </section>
+
+    <section class="desktop-window update-log-window" id="app-update-log" data-app="update-log" hidden aria-label="Update Log">
+      <header class="window-bar">
+        <div>
+          <p class="eyebrow">system update</p>
+          <h1>Update Log</h1>
+        </div>
+        <div class="window-actions">
+          <button class="window-close" type="button" data-close-app="update-log" aria-label="Close Update Log">&times;</button>
+        </div>
+      </header>
+      <div class="update-log-panel">
+        <span class="update-badge">UV fix</span>
+        <h2>Ultraviolet browsing patched</h2>
+        <p>Brave searches through Ultraviolet now use the same URL encoder as the service worker, fixing the invalid URL crash.</p>
+        <ul>
+          <li>Fixed the <code>Failed to construct 'URL'</code> error in <code>uv.sw.js</code>.</li>
+          <li>Stopped Brave search URLs from turning into malformed proxied paths.</li>
+          <li>Kept the Scramjet and Ultraviolet engine switcher behavior unchanged.</li>
+        </ul>
+        <button class="update-log-dismiss" id="dismiss-update-log" type="button">Got it</button>
+      </div>
+    </section>
+
+    <footer class="taskbar" aria-label="Taskbar">
+      <div class="taskbar-apps">
+        <button type="button" data-open-app="browser">Game Browser</button>
+        <button type="button" data-open-app="continue">Continue</button>
+        <button type="button" data-open-app="recent">Recent</button>
+        <button type="button" data-open-app="web">Brave</button>
+        <button type="button" data-open-app="settings">Settings</button>
+      </div>
+      <div class="system-tray" aria-label="System status">
+        <span id="battery-status">Battery --%</span>
+        <span id="clock">--:--</span>
+      </div>
+    </footer>
+  </main>
+
+  <section class="inline-player" id="player" hidden aria-label="Game player">
+    <header class="player-topbar">
+      <button class="player-button" id="player-back" type="button" aria-label="Back to desktop" title="Back to desktop">
+        <span aria-hidden="true">&larr;</span>
+      </button>
+      <h2 id="player-title">Game</h2>
+      <div class="player-actions">
+        <button class="player-button" id="player-refresh" type="button" aria-label="Refresh game" title="Refresh game">
+          <span aria-hidden="true">&#8635;</span>
+        </button>
+        <button class="player-button" id="player-fullscreen" type="button" aria-label="Fullscreen" title="Fullscreen">
+          <span aria-hidden="true">&#9974;</span>
+        </button>
+      </div>
+    </header>
+    <iframe id="player-frame" title="Game" allow="fullscreen; autoplay; gamepad; clipboard-read; clipboard-write"></iframe>
+  </section>
+
+  <script src="./shard-origins.js"></script>
+  <script src="./scramjet-init.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

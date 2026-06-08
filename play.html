@@ -4,13 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kyle OS</title>
+  <script>
+    if (sessionStorage.getItem("kyleos:gateway") !== "unlocked") {
+      window.location.replace("./index.html");
+    }
+  </script>
   <link rel="icon" href="./assets/logo.png" type="image/png">
   <link rel="stylesheet" href="./play.css">
 </head>
 <body>
   <div class="game-shell">
     <header class="game-topbar">
-      <a class="icon-button" href="./index.html" aria-label="Back to main menu" title="Back to main menu">
+      <a class="icon-button" href="./site.html" aria-label="Back to main menu" title="Back to main menu">
         <span aria-hidden="true">←</span>
       </a>
 
