@@ -857,6 +857,7 @@ function createWebFrame(tab, useExistingFrame = false) {
   frame.title = `Brave Web - ${tab.title}`;
   frame.referrerPolicy = "no-referrer";
   frame.allow = "fullscreen; autoplay; clipboard-read; clipboard-write";
+  frame.sandbox = "allow-downloads allow-forms allow-modals allow-pointer-lock allow-presentation allow-same-origin allow-scripts";
   frame.dataset.webTab = tab.id;
   frame.hidden = tab.id !== activeWebTabId;
   frame.src = browserFrameUrl(tab.id, tab.shellBoot);
