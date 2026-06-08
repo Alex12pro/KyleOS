@@ -60,25 +60,24 @@
       window.parent.postMessage({ type, tabId, engine: selectedEngine, ...detail }, window.location.origin);
     }
 
-    function openWithHiddenProxy(url) {
+    async function openWithHiddenProxy(url) {
       if (!url) return;
 
-      const form = document.createElement("form");
-      form.method = "post";
-      form.action = "/api/v1/data";
-      form.target = pageFrame.name || `browser-page-${tabId}`;
-      form.style.display = "none";
+      const response = await fetch("/api/v1/data", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-KyleOS-Tokenize": "1",
+        },
+        body: new URLSearchParams({ url }),
+      });
 
-      pageFrame.name = form.target;
+      if (!response.ok) {
+        throw new Error("Could not open this page through the hidden proxy.");
+      }
 
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "url";
-      input.value = url;
-      form.append(input);
-      document.body.append(form);
-      form.submit();
-      form.remove();
+      const data = await response.json();
+      pageFrame.src = data.path;
     }
 
     function loadEngineScript() {

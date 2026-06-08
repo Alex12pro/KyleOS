@@ -357,6 +357,19 @@ async function readPostedUrl(request) {
   return new URLSearchParams(body).get("url") || "";
 }
 
+function validateProxyUrl(rawUrl) {
+  try {
+    const targetUrl = new URL(rawUrl);
+    if (!["http:", "https:"].includes(targetUrl.protocol) || isBlockedHost(targetUrl.hostname)) {
+      return null;
+    }
+
+    return targetUrl;
+  } catch {
+    return null;
+  }
+}
+
 function headerBag(headers) {
   const normalized = new Map();
   for (const [key, value] of Object.entries(headers)) {
@@ -525,6 +538,22 @@ export async function handleProxyRequest(request, response) {
     || (request.method === "POST" ? await readPostedUrl(request) : "");
   const searchQuery = requestUrl.searchParams.get("search");
 
+  if (request.method === "POST" && request.headers["x-kyleos-tokenize"] === "1") {
+    const targetUrl = validateProxyUrl(rawUrl);
+    if (!targetUrl) {
+      response.statusCode = 400;
+      response.setHeader("Content-Type", "application/json; charset=utf-8");
+      response.end(JSON.stringify({ error: "Invalid url" }));
+      return;
+    }
+
+    response.statusCode = 200;
+    response.setHeader("Content-Type", "application/json; charset=utf-8");
+    response.setHeader("Cache-Control", "no-store");
+    response.end(JSON.stringify({ path: proxiedUrl(targetUrl.href) }));
+    return;
+  }
+
   if (searchQuery) {
     response.statusCode = 200;
     response.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -539,18 +568,10 @@ export async function handleProxyRequest(request, response) {
     return;
   }
 
-  let targetUrl;
-  try {
-    targetUrl = new URL(rawUrl);
-  } catch {
+  const targetUrl = validateProxyUrl(rawUrl);
+  if (!targetUrl) {
     response.statusCode = 400;
     response.end("Invalid url");
-    return;
-  }
-
-  if (!["http:", "https:"].includes(targetUrl.protocol) || isBlockedHost(targetUrl.hostname)) {
-    response.statusCode = 400;
-    response.end("Blocked url");
     return;
   }
 
