@@ -782,11 +782,11 @@ function normalizeWebTarget(value) {
     return `https://${trimmed}`;
   }
 
-  return `/api/v1/data?search=${encodeURIComponent(trimmed)}`;
+  return `https://search.brave.com/search?q=${encodeURIComponent(trimmed)}`;
 }
 
 function isInternalWebUrl(url) {
-  return url.startsWith("/api/v1/data?") || url.startsWith("/api/proxy?");
+  return url.startsWith("/api/dat/token?") || url.startsWith("/api/v1/data?") || url.startsWith("/api/proxy?");
 }
 
 function setWebStatus(title, message) {
@@ -842,8 +842,6 @@ function activeWebTab() {
 
 function titleForWebUrl(url) {
   if (!url) return "New Tab";
-  if (url.startsWith("/api/v1/data?search=")) return "Search";
-
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "search.brave.com") return "Search";

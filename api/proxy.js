@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-const hiddenProxyPath = "/api/v1/data";
+const hiddenProxyPath = "/api/dat/token";
 const tokenKey = createHash("sha256")
   .update(process.env.KYLEOS_PROXY_SECRET || "kyleos-hidden-proxy-v1")
   .digest();
