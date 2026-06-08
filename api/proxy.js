@@ -3,6 +3,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+const proxyTargets = new Map();
+const maxProxyTargets = 1200;
+
 const privateHostPatterns = [
   /^localhost$/i,
   /^127\./,
@@ -29,10 +32,26 @@ function rewriteUrl(value, baseUrl) {
       return value;
     }
 
-    return `/api/proxy?url=${encodeURIComponent(absolute.href)}`;
+    return proxiedUrl(absolute.href);
   } catch {
     return value;
   }
+}
+
+function rememberProxyTarget(url) {
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+  proxyTargets.set(id, { url, createdAt: Date.now() });
+
+  if (proxyTargets.size > maxProxyTargets) {
+    const oldest = [...proxyTargets.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt)[0]?.[0];
+    if (oldest) proxyTargets.delete(oldest);
+  }
+
+  return id;
+}
+
+function lookupProxyTarget(id) {
+  return proxyTargets.get(id)?.url || "";
 }
 
 function escapeHtml(value) {
@@ -62,7 +81,7 @@ function stripTags(value) {
 }
 
 function proxiedUrl(url) {
-  return `/api/proxy?url=${encodeURIComponent(url)}`;
+  return `/api/proxy?id=${encodeURIComponent(rememberProxyTarget(url))}`;
 }
 
 function searchResult({ title, url, description }) {
@@ -245,7 +264,19 @@ function rewriteHtml(html, targetUrl) {
 
   const keepInsideScript = `<script>
 (() => {
-  const proxied = (url) => "/api/proxy?url=" + encodeURIComponent(new URL(url, location.href).href);
+  const openProxied = (url) => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = "/api/proxy";
+    form.style.display = "none";
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "url";
+    input.value = new URL(url, location.href).href;
+    form.append(input);
+    document.body.append(form);
+    form.submit();
+  };
   document.addEventListener("click", (event) => {
     const link = event.target.closest("a[href]");
     if (!link) return;
@@ -258,7 +289,11 @@ function rewriteHtml(html, targetUrl) {
     const href = link.getAttribute("href");
     if (!href || href.startsWith("#") || href.startsWith("data:") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) return;
     event.preventDefault();
-    location.href = href.startsWith("/api/proxy?") ? href : proxied(href);
+    if (href.startsWith("/api/proxy?")) {
+      location.href = href;
+      return;
+    }
+    openProxied(href);
   });
   document.addEventListener("submit", (event) => {
     const form = event.target;
@@ -269,12 +304,12 @@ function rewriteHtml(html, targetUrl) {
     event.preventDefault();
     const url = new URL(action, location.href);
     new FormData(form).forEach((value, key) => url.searchParams.set(key, value));
-    location.href = proxied(url.href);
+    openProxied(url.href);
   });
 })();
 </script>`;
 
-  const base = `<base href="${targetUrl}" target="_self">`;
+  const base = `<base target="_self">`;
   const withBase = output.includes("<head")
     ? output.replace(/<head([^>]*)>/i, `<head$1>${base}`)
     : `${base}${output}`;
@@ -293,7 +328,31 @@ function rewriteCss(css, targetUrl) {
 
 function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,OPTIONS");
+}
+
+async function readRequestBody(request) {
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function readPostedUrl(request) {
+  const body = await readRequestBody(request);
+  const contentType = request.headers["content-type"] || "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      return JSON.parse(body).url || "";
+    } catch {
+      return "";
+    }
+  }
+
+  return new URLSearchParams(body).get("url") || "";
 }
 
 function headerBag(headers) {
@@ -452,14 +511,16 @@ export async function handleProxyRequest(request, response) {
     return;
   }
 
-  if (!["GET", "HEAD"].includes(request.method)) {
+  if (!["GET", "HEAD", "POST"].includes(request.method)) {
     response.statusCode = 405;
     response.end("Method not allowed");
     return;
   }
 
   const requestUrl = new URL(request.url, "http://localhost");
-  const rawUrl = requestUrl.searchParams.get("url");
+  const rawUrl = requestUrl.searchParams.get("url")
+    || lookupProxyTarget(requestUrl.searchParams.get("id") || "")
+    || (request.method === "POST" ? await readPostedUrl(request) : "");
   const searchQuery = requestUrl.searchParams.get("search");
 
   if (searchQuery) {
@@ -492,7 +553,7 @@ export async function handleProxyRequest(request, response) {
   }
 
   const upstream = await fetchUpstream(targetUrl, {
-    method: request.method,
+    method: request.method === "HEAD" ? "HEAD" : "GET",
     headers: {
       "User-Agent": "KyleOS/1.0",
       Accept: request.headers.accept || "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

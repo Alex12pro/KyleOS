@@ -28,7 +28,7 @@
   <script>
     const tabId = decodeURIComponent(location.hash.slice(1) || "tab");
     const params = new URLSearchParams(location.search);
-    const selectedEngine = params.get("engine") === "ultraviolet" ? "ultraviolet" : "scramjet";
+    const selectedEngine = ["scramjet", "ultraviolet"].includes(params.get("engine")) ? params.get("engine") : "kyle";
     const pageFrame = document.querySelector("#browser-page");
     const ENGINE_STARTUP_TIMEOUT = 30000;
     const engines = {
@@ -60,6 +60,27 @@
       window.parent.postMessage({ type, tabId, engine: selectedEngine, ...detail }, window.location.origin);
     }
 
+    function openWithHiddenProxy(url) {
+      if (!url) return;
+
+      const form = document.createElement("form");
+      form.method = "post";
+      form.action = "/api/proxy";
+      form.target = pageFrame.name || `browser-page-${tabId}`;
+      form.style.display = "none";
+
+      pageFrame.name = form.target;
+
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "url";
+      input.value = url;
+      form.append(input);
+      document.body.append(form);
+      form.submit();
+      form.remove();
+    }
+
     function loadEngineScript() {
       return new Promise((resolve, reject) => {
         const existing = document.querySelector(`script[data-engine="${selectedEngine}"]`);
@@ -84,6 +105,10 @@
     }
 
     async function waitForProxyEngine() {
+      if (!engineConfig) {
+        return null;
+      }
+
       if (proxyController) {
         return proxyController;
       }
@@ -143,6 +168,10 @@
     }
 
     async function ensureProxyFrame() {
+      if (!engineConfig) {
+        return null;
+      }
+
       const engine = await waitForProxyEngine();
       if (!proxyFrame) {
         proxyFrame = engine.createFrame(pageFrame);
@@ -152,6 +181,11 @@
 
     async function navigate(url) {
       if (!url) return;
+
+      if (!engineConfig) {
+        openWithHiddenProxy(url);
+        return;
+      }
 
       if (url.startsWith("/api/proxy?")) {
         pageFrame.src = url;
@@ -186,13 +220,15 @@
       send("kyleos:web-shell-loaded");
     });
 
-    window.addEventListener(engineConfig.readyEvent, () => {
-      send("kyleos:web-shell-ready");
-    });
+    if (engineConfig) {
+      window.addEventListener(engineConfig.readyEvent, () => {
+        send("kyleos:web-shell-ready");
+      });
 
-    window.addEventListener(engineConfig.errorEvent, (event) => {
-      send("kyleos:web-shell-error", { message: event.detail?.message || "The browser engine could not start." });
-    });
+      window.addEventListener(engineConfig.errorEvent, (event) => {
+        send("kyleos:web-shell-error", { message: event.detail?.message || "The browser engine could not start." });
+      });
+    }
 
     waitForProxyEngine().then(() => {
       send("kyleos:web-shell-ready");

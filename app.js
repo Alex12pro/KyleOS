@@ -50,7 +50,7 @@ const defaultSettings = {
   customWallpaper: "",
   pattern: "grid",
   interactivePattern: true,
-  proxyEngine: "scramjet",
+  proxyEngine: "kyle",
   accent: "blue",
   clock24: false,
   reduceMotion: false,
@@ -75,6 +75,7 @@ let webLoadTimer = null;
 let scramjetReadyPromise = null;
 const SCRAMJET_STARTUP_TIMEOUT = 30000;
 const proxyEngineLabels = {
+  kyle: "Hidden Proxy",
   scramjet: "Scramjet",
   ultraviolet: "Ultraviolet",
 };
