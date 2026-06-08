@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-const proxyTargets = new Map();
-const maxProxyTargets = 1200;
 const hiddenProxyPath = "/api/v1/data";
+const tokenKey = createHash("sha256")
+  .update(process.env.KYLEOS_PROXY_SECRET || "kyleos-hidden-proxy-v1")
+  .digest();
 
 const privateHostPatterns = [
   /^localhost$/i,
@@ -40,20 +42,29 @@ function rewriteUrl(value, baseUrl) {
 }
 
 function rememberProxyTarget(url) {
-  const token = Buffer.from(`${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}:${url}`)
-    .toString("base64url");
-  proxyTargets.set(token, { url, createdAt: Date.now() });
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", tokenKey, iv);
+  const ciphertext = Buffer.concat([cipher.update(url, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
 
-  if (proxyTargets.size > maxProxyTargets) {
-    const oldest = [...proxyTargets.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt)[0]?.[0];
-    if (oldest) proxyTargets.delete(oldest);
-  }
-
-  return token;
+  return Buffer.concat([iv, tag, ciphertext]).toString("base64url");
 }
 
 function lookupProxyTarget(token) {
-  return proxyTargets.get(token)?.url || "";
+  try {
+    const bytes = Buffer.from(token, "base64url");
+    if (bytes.length <= 28) return "";
+
+    const iv = bytes.subarray(0, 12);
+    const tag = bytes.subarray(12, 28);
+    const ciphertext = bytes.subarray(28);
+    const decipher = createDecipheriv("aes-256-gcm", tokenKey, iv);
+    decipher.setAuthTag(tag);
+
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  } catch {
+    return "";
+  }
 }
 
 function escapeHtml(value) {
