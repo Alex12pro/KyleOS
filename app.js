@@ -50,7 +50,7 @@ const defaultSettings = {
   customWallpaper: "",
   pattern: "grid",
   interactivePattern: true,
-  proxyEngine: "kyle",
+  proxyEngine: "scramjet",
   accent: "blue",
   clock24: false,
   reduceMotion: false,
@@ -1134,6 +1134,10 @@ function handleWebShellMessage(event) {
     if (tab.id === activeWebTabId) {
       const engineName = proxyEngineLabels[event.data.engine || osSettings.proxyEngine] || "Proxy";
       setWebStatus(`${engineName} failed`, error.message);
+    }
+  } else if (event.data.type === "kyleos:web-shell-fallback") {
+    if (tab.id === activeWebTabId) {
+      setWebStatus("Using fallback", event.data.message || "Opening through the hidden libcurl route.");
     }
   } else if (event.data.type === "kyleos:web-shell-loaded") {
     handleWebFrameLoad(tab.id);

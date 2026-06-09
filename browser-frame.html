@@ -55,6 +55,7 @@
     let proxyFrame = null;
     let proxyReadyPromise = null;
     let proxyController = null;
+    let activeNavigationUrl = "";
 
     function send(type, detail = {}) {
       window.parent.postMessage({ type, tabId, engine: selectedEngine, ...detail }, window.location.origin);
@@ -78,6 +79,13 @@
 
       const data = await response.json();
       pageFrame.src = data.path;
+    }
+
+    async function openWithHiddenProxyFallback(url, reason) {
+      send("kyleos:web-shell-fallback", {
+        message: reason ? `${engineConfig?.label || "Proxy"} fell back to the hidden libcurl route: ${reason}` : "Using hidden libcurl route.",
+      });
+      await openWithHiddenProxy(url);
     }
 
     function loadEngineScript() {
@@ -180,6 +188,7 @@
 
     async function navigate(url) {
       if (!url) return;
+      activeNavigationUrl = url;
 
       if (url.startsWith("/api/dat/token?") || url.startsWith("/api/v1/data?") || url.startsWith("/api/proxy?")) {
         pageFrame.src = url;
@@ -191,8 +200,12 @@
         return;
       }
 
-      const frame = await ensureProxyFrame();
-      frame.go(url);
+      try {
+        const frame = await ensureProxyFrame();
+        frame.go(url);
+      } catch (error) {
+        await openWithHiddenProxyFallback(url, error.message || "engine navigation failed");
+      }
     }
 
     window.addEventListener("message", async (event) => {
@@ -206,8 +219,13 @@
         } else if (event.data.type === "kyleos:web-forward") {
           proxyFrame?.forward?.();
         } else if (event.data.type === "kyleos:web-reload") {
-          proxyFrame?.reload?.();
+          if (proxyFrame?.reload) {
+            proxyFrame.reload();
+          } else if (activeNavigationUrl) {
+            await openWithHiddenProxy(activeNavigationUrl);
+          }
         } else if (event.data.type === "kyleos:web-blank") {
+          activeNavigationUrl = "";
           pageFrame.src = "about:blank";
         }
       } catch (error) {

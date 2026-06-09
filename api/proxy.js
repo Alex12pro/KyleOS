@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 const hiddenProxyPath = "/api/dat/token";
+const browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 const tokenKey = createHash("sha256")
   .update(process.env.KYLEOS_PROXY_SECRET || "kyleos-hidden-proxy-v1")
   .digest();
@@ -95,6 +96,19 @@ function stripTags(value) {
 
 function proxiedUrl(url) {
   return `${hiddenProxyPath}?_token=${encodeURIComponent(rememberProxyTarget(url))}`;
+}
+
+function looksLikeScriptRequest(targetUrl, acceptHeader = "") {
+  return /\.(?:js|mjs)(?:$|\?)/i.test(targetUrl.pathname) || /javascript|ecmascript|\*\/\*/i.test(acceptHeader);
+}
+
+function looksLikeStyleRequest(targetUrl, acceptHeader = "") {
+  return /\.css(?:$|\?)/i.test(targetUrl.pathname) || /text\/css/i.test(acceptHeader);
+}
+
+function isBackgroundProbe(targetUrl) {
+  const pathname = targetUrl.pathname;
+  return pathname === "/_/bscframe" || pathname === "/error_204" || pathname.endsWith("/error_204");
 }
 
 function searchResult({ title, url, description }) {
@@ -239,6 +253,17 @@ function renderSearchPage(query, results) {
 
 function rewriteHtml(html, targetUrl) {
   let output = html.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
+  const protectedBlocks = [];
+
+  output = output.replace(/(<script\b[^>]*>)([\s\S]*?)(<\/script>)/gi, (match, open, body, close) => {
+    const index = protectedBlocks.push(rewriteJavaScript(body, targetUrl)) - 1;
+    return `${open}__KYLEOS_PROTECTED_BLOCK_${index}__${close}`;
+  });
+
+  output = output.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (match, open, body, close) => {
+    const index = protectedBlocks.push(rewriteCss(body, targetUrl)) - 1;
+    return `${open}__KYLEOS_PROTECTED_BLOCK_${index}__${close}`;
+  });
 
   output = output.replace(/\s(target)=["'][^"']*["']/gi, "");
 
@@ -274,6 +299,105 @@ function rewriteHtml(html, targetUrl) {
       return ` srcset="${rewritten}"`;
     }
   );
+
+  const earlyProxyScript = `<script>
+(function() {
+  var proxyPath = "${hiddenProxyPath}";
+  var sourceUrl = ${JSON.stringify(targetUrl)};
+  var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  var nativeOpen = XMLHttpRequest.prototype.open;
+  var nativeSend = XMLHttpRequest.prototype.send;
+  var proxiedAttributes = { href: true, src: true, action: true };
+  function shouldSkip(url) {
+    var value = String(url || "");
+    return !value || value.charAt(0) === "#" || /^(data|blob|about|javascript):/i.test(value) || value.indexOf(proxyPath) === 0;
+  }
+  function tokenizedSync(url) {
+    try {
+      var absolute = new URL(url, sourceUrl).href;
+      var request = new XMLHttpRequest();
+      nativeOpen.call(request, "POST", proxyPath, false);
+      request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      request.setRequestHeader("X-KyleOS-Tokenize", "1");
+      nativeSend.call(request, new URLSearchParams({ url: absolute }).toString());
+      if (request.status < 200 || request.status >= 300) return "";
+      return JSON.parse(request.responseText).path || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  if (nativeFetch) {
+    window.fetch = function(input, init) {
+      var requestUrl = input instanceof Request ? input.url : String(input);
+      var proxied = shouldSkip(requestUrl) ? "" : tokenizedSync(requestUrl);
+      if (!proxied) return nativeFetch(input, init);
+      if (input instanceof Request) {
+        var nextInit = {
+          method: input.method,
+          headers: input.headers,
+          credentials: input.credentials,
+          cache: input.cache,
+          redirect: input.redirect,
+          referrer: input.referrer,
+          integrity: input.integrity,
+          keepalive: input.keepalive,
+          signal: input.signal,
+        };
+        if (init) Object.assign(nextInit, init);
+        return nativeFetch(proxied, nextInit);
+      }
+      return nativeFetch(proxied, init);
+    };
+  }
+
+  XMLHttpRequest.prototype.open = function(method, url) {
+    var rest = Array.prototype.slice.call(arguments, 2);
+    this.__kyleosProxyMethod = method;
+    this.__kyleosProxyRest = rest;
+    this.__kyleosProxyUrl = shouldSkip(url) ? "" : String(url);
+    return nativeOpen.apply(this, [method, this.__kyleosProxyUrl ? "about:blank" : url].concat(rest));
+  };
+
+  XMLHttpRequest.prototype.send = function(body) {
+    if (this.__kyleosProxyUrl) {
+      var proxied = tokenizedSync(this.__kyleosProxyUrl);
+      nativeOpen.apply(this, [this.__kyleosProxyMethod || "GET", proxied].concat(this.__kyleosProxyRest || [true]));
+    }
+    return nativeSend.call(this, body);
+  };
+
+  var nativeSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(name, value) {
+    if (proxiedAttributes[String(name).toLowerCase()] && !shouldSkip(value)) {
+      return nativeSetAttribute.call(this, name, tokenizedSync(value) || value);
+    }
+
+    return nativeSetAttribute.call(this, name, value);
+  };
+
+  function proxyProperty(prototype, property) {
+    if (!prototype) return;
+    var descriptor = Object.getOwnPropertyDescriptor(prototype, property);
+    if (!descriptor || !descriptor.set) return;
+    Object.defineProperty(prototype, property, {
+      configurable: descriptor.configurable,
+      enumerable: descriptor.enumerable,
+      get: descriptor.get,
+      set: function(value) {
+        return descriptor.set.call(this, shouldSkip(value) ? value : tokenizedSync(value) || value);
+      },
+    });
+  }
+
+  proxyProperty(window.HTMLAnchorElement && window.HTMLAnchorElement.prototype, "href");
+  proxyProperty(window.HTMLFormElement && window.HTMLFormElement.prototype, "action");
+  proxyProperty(window.HTMLIFrameElement && window.HTMLIFrameElement.prototype, "src");
+  proxyProperty(window.HTMLImageElement && window.HTMLImageElement.prototype, "src");
+  proxyProperty(window.HTMLLinkElement && window.HTMLLinkElement.prototype, "href");
+  proxyProperty(window.HTMLScriptElement && window.HTMLScriptElement.prototype, "src");
+})();
+</script>`;
 
   const keepInsideScript = `<script>
 (() => {
@@ -322,7 +446,9 @@ function rewriteHtml(html, targetUrl) {
 })();
 </script>`;
 
-  const base = `<base target="_self">`;
+  output = output.replace(/__KYLEOS_PROTECTED_BLOCK_(\d+)__/g, (match, index) => protectedBlocks[Number(index)] ?? "");
+
+  const base = `<base target="_self">${earlyProxyScript}`;
   const withBase = output.includes("<head")
     ? output.replace(/<head([^>]*)>/i, `<head$1>${base}`)
     : `${base}${output}`;
@@ -337,6 +463,34 @@ function rewriteCss(css, targetUrl) {
     /url\((["']?)([^"')]+)\1\)/gi,
     (match, quote, value) => `url("${rewriteUrl(value, targetUrl)}")`
   );
+}
+
+function rewriteJavaScript(script, targetUrl) {
+  return script
+    .replace(
+      /(import\(\s*["'])([^"']+)(["']\s*\))/gi,
+      (match, before, value, after) => `${before}${rewriteUrl(value, targetUrl)}${after}`
+    )
+    .replace(
+      /(\bimport\s*(?:[^"']*?\s*from\s*)?["'])([^"']+)(["'])/gi,
+      (match, before, value, after) => `${before}${rewriteUrl(value, targetUrl)}${after}`
+    )
+    .replace(
+      /(\bexport\s*(?:[^"']*?\s*from\s*)["'])([^"']+)(["'])/gi,
+      (match, before, value, after) => `${before}${rewriteUrl(value, targetUrl)}${after}`
+    )
+    .replace(
+      /(new\s+URL\(\s*["'])([^"']+)(["']\s*,\s*import\.meta\.url\s*\))/gi,
+      (match, before, value, after) => `${before}${rewriteUrl(value, targetUrl)}${after}`
+    )
+    .replace(
+      /(["'])(\.\.?\/[^"']+\.(?:js|mjs|css|json|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)(?:\?[^"']*)?)\1/gi,
+      (match, quote, value) => `${quote}${rewriteUrl(value, targetUrl)}${quote}`
+    );
+}
+
+function isJavaScriptContent(contentType) {
+  return /(?:java|ecma)script|text\/x-component/i.test(contentType);
 }
 
 function setCorsHeaders(response) {
@@ -454,6 +608,7 @@ async function fetchWithCurl(targetUrl, options = {}) {
       "--silent",
       "--show-error",
       "--compressed",
+      ...(process.platform === "win32" ? ["--ssl-no-revoke"] : []),
       "--max-redirs",
       "10",
       "--connect-timeout",
@@ -471,15 +626,17 @@ async function fetchWithCurl(targetUrl, options = {}) {
       "--write-out",
       "%{http_code}\n%{url_effective}",
       "--user-agent",
-      headers["User-Agent"] || headers["user-agent"] || "KyleOS/1.0",
+      headers["User-Agent"] || headers["user-agent"] || browserUserAgent,
+      "--header",
+      `Accept: ${headers.Accept || headers.accept || "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"}`,
+      "--header",
+      `Accept-Language: ${headers["Accept-Language"] || headers["accept-language"] || "en-US,en;q=0.9"}`,
+      "--header",
+      "DNT: 1",
     ];
 
     if (method === "HEAD") {
       args.push("--head");
-    }
-
-    if (headers.Accept || headers.accept) {
-      args.push("--header", `Accept: ${headers.Accept || headers.accept}`);
     }
 
     args.push(String(targetUrl));
@@ -508,8 +665,15 @@ async function fetchWithCurl(targetUrl, options = {}) {
 }
 
 async function fetchWithNode(targetUrl, options = {}) {
+  const headers = options.headers || {};
   return fetch(targetUrl, {
     ...options,
+    headers: {
+      ...headers,
+      "User-Agent": headers["User-Agent"] || headers["user-agent"] || browserUserAgent,
+      "Accept-Language": headers["Accept-Language"] || headers["accept-language"] || "en-US,en;q=0.9",
+      DNT: headers.DNT || headers.dnt || "1",
+    },
     redirect: "follow",
   });
 }
@@ -586,11 +750,20 @@ export async function handleProxyRequest(request, response) {
     return;
   }
 
+  if (isBackgroundProbe(targetUrl)) {
+    response.statusCode = 204;
+    response.setHeader("Cache-Control", "no-store");
+    response.end();
+    return;
+  }
+
+  const acceptHeader = request.headers.accept || "";
   const upstream = await fetchUpstream(targetUrl, {
     method: request.method === "HEAD" ? "HEAD" : "GET",
     headers: {
-      "User-Agent": "KyleOS/1.0",
-      Accept: request.headers.accept || "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "User-Agent": browserUserAgent,
+      "Accept-Language": request.headers["accept-language"] || "en-US,en;q=0.9",
+      Accept: acceptHeader || "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     },
   });
 
@@ -601,6 +774,24 @@ export async function handleProxyRequest(request, response) {
 
   if (request.method === "HEAD") {
     response.end();
+    return;
+  }
+
+  if (!upstream.ok && looksLikeScriptRequest(targetUrl, acceptHeader)) {
+    response.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    response.end(`/* KyleOS proxy: upstream returned ${upstream.status} for this script. */`);
+    return;
+  }
+
+  if (!upstream.ok && looksLikeStyleRequest(targetUrl, acceptHeader)) {
+    response.setHeader("Content-Type", "text/css; charset=utf-8");
+    response.end(`/* KyleOS proxy: upstream returned ${upstream.status} for this stylesheet. */`);
+    return;
+  }
+
+  if (isJavaScriptContent(contentType)) {
+    response.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    response.end(rewriteJavaScript(await upstream.text(), upstream.url || targetUrl.href));
     return;
   }
 
