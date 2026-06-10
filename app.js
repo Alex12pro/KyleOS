@@ -51,6 +51,7 @@ const defaultSettings = {
   pattern: "grid",
   interactivePattern: true,
   proxyEngine: "scramjet",
+  proxySettingsVersion: 2,
   accent: "blue",
   clock24: false,
   reduceMotion: false,
@@ -106,7 +107,11 @@ function writeList(key, value) {
 
 function readSettings() {
   try {
-    return { ...defaultSettings, ...JSON.parse(localStorage.getItem(settingsKey)) };
+    const stored = JSON.parse(localStorage.getItem(settingsKey)) || {};
+    if (!stored.proxySettingsVersion && stored.proxyEngine === "kyle") {
+      stored.proxyEngine = "scramjet";
+    }
+    return { ...defaultSettings, ...stored, proxySettingsVersion: defaultSettings.proxySettingsVersion };
   } catch {
     return { ...defaultSettings };
   }

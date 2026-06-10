@@ -24,12 +24,14 @@
   </style>
 </head>
 <body>
-  <iframe id="browser-page" title="Browser page" referrerpolicy="no-referrer" allow="fullscreen; autoplay; clipboard-read; clipboard-write" sandbox="allow-downloads allow-forms allow-modals allow-pointer-lock allow-presentation allow-scripts"></iframe>
+  <iframe id="browser-page" title="Browser page" referrerpolicy="no-referrer" allow="fullscreen; autoplay; clipboard-read; clipboard-write"></iframe>
   <script>
     const tabId = decodeURIComponent(location.hash.slice(1) || "tab");
     const params = new URLSearchParams(location.search);
     const selectedEngine = ["scramjet", "ultraviolet"].includes(params.get("engine")) ? params.get("engine") : "kyle";
     const pageFrame = document.querySelector("#browser-page");
+    const sharedSandbox = "allow-downloads allow-forms allow-modals allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-presentation allow-scripts";
+    pageFrame.setAttribute("sandbox", selectedEngine === "kyle" ? sharedSandbox : `${sharedSandbox} allow-same-origin`);
     const ENGINE_STARTUP_TIMEOUT = 30000;
     const engines = {
       scramjet: {
